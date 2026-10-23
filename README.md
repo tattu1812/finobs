@@ -1,3 +1,4 @@
+Hiện tại t đã cấu hình bảo vệ nhánh `main`, nên các Pull Request cần có ít nhất 1 người review và approve, đồng thời CI phải chạy xanh thì mới được merge vào `main`. PR phần hạ tầng S1 của t đang chờ Trung review, nên trước mắt mọi người checkout nhánh `tu` để chạy thử nhé.
 ## 1. Yêu cầu cài đặt
 
 Máy phát triển cần có:
@@ -107,4 +108,5 @@ Mỗi thành viên thực hiện:
 7. Gửi ảnh chụp `make ps` cùng thông tin lỗi nếu có.
 
 Nếu cổng đã được ứng dụng khác sử dụng, kiểm tra và điều chỉnh cấu hình theo hướng dẫn của nhóm trước khi chạy lại.
+
 
