@@ -1,21 +1,4 @@
-# FinObs – Financial Data Observability Platform
-
-FinObs là dự án xây dựng nền tảng quan sát và đánh giá độ tin cậy của hệ thống dữ liệu quy mô lớn.
-
-## 1. Hạ tầng Sprint 1
-
-Sprint 1 cung cấp môi trường phát triển cục bộ bằng Docker Compose, gồm:
-
-| Thành phần | Vai trò | Địa chỉ mặc định |
-|---|---|---|
-| Apache Kafka | Message broker cho luồng dữ liệu | `localhost:9092` |
-| MinIO | Object storage tương thích S3 | `http://localhost:9001` (Console) |
-| Apache Spark Master | Điều phối xử lý dữ liệu | `http://localhost:8080` |
-| Apache Spark Worker | Thực thi tác vụ Spark | Kết nối tới Spark Master |
-
-Lưu ý: Các thành phần này phục vụ môi trường phát triển S1, chưa phải hệ thống production.
-
-## 2. Yêu cầu cài đặt
+## 1. Yêu cầu cài đặt
 
 Máy phát triển cần có:
 
@@ -37,7 +20,7 @@ make --version
 docker info
 ```
 
-## 3. Tải source code
+## 2. Tải source code
 
 ```bash
 git clone https://github.com/tattu1812/finobs.git
@@ -51,9 +34,8 @@ git fetch origin
 git checkout tu
 ```
 
-Sau khi PR được merge, có thể sử dụng nhánh `main` theo quy trình chung của nhóm.
 
-## 4. Cấu hình môi trường
+## 3. Cấu hình môi trường
 
 Tạo file `.env` từ mẫu:
 
@@ -65,7 +47,7 @@ Mở `.env` và kiểm tra các cổng, tài khoản, mật khẩu MinIO.
 
 Không commit file `.env` hoặc mật khẩu thật lên GitHub.
 
-## 5. Khởi chạy FinObs
+## 4. Khởi chạy FinObs
 
 Kiểm tra cấu hình Docker Compose:
 
@@ -87,7 +69,7 @@ make ps
 
 Kỳ vọng các dịch vụ Kafka, MinIO, Spark Master và Spark Worker đều chạy.
 
-## 6. Kiểm tra giao diện
+## 5. Kiểm tra giao diện
 
 Sau khi khởi chạy:
 
@@ -96,11 +78,8 @@ Sau khi khởi chạy:
 
 Đăng nhập MinIO bằng tài khoản và mật khẩu đã cấu hình trong `.env`.
 
-Trên Spark Master UI, kiểm tra có ít nhất một Spark Worker kết nối và trạng thái Master là `ALIVE`.
 
-Kafka không có giao diện web mặc định trong cấu hình S1; có thể kiểm tra bằng lệnh Docker hoặc Kafka CLI.
-
-## 7. Các lệnh Makefile
+## 6. Các lệnh Makefile
 
 | Lệnh | Công dụng |
 |---|---|
@@ -115,7 +94,7 @@ Kafka không có giao diện web mặc định trong cấu hình S1; có thể k
 
 Lệnh `make down` không mặc định xóa named volumes. Không sử dụng `docker compose down -v` nếu cần giữ dữ liệu.
 
-## 8. Kiểm thử trên máy các thành viên
+## 7. Kiểm thử trên máy các thành viên
 
 Mỗi thành viên thực hiện:
 
@@ -129,18 +108,3 @@ Mỗi thành viên thực hiện:
 
 Nếu cổng đã được ứng dụng khác sử dụng, kiểm tra và điều chỉnh cấu hình theo hướng dẫn của nhóm trước khi chạy lại.
 
-## 9. Tài liệu nghiên cứu
-
-Ghi chú bài báo Lakehouse:
-
-`docs/papers/lakehouse-notes.md`
-
-Nguồn: https://www.cidrdb.org/cidr2021/papers/cidr2021_paper17.pdf
-
-## 10. Quy trình đóng góp
-
-- Mỗi thành viên làm việc trên nhánh riêng.
-- Tạo Pull Request vào `main`.
-- CI phải chạy thành công.
-- Pull Request cần ít nhất một approval theo quy tắc bảo vệ nhánh.
-- Không push trực tiếp lên `main`.
