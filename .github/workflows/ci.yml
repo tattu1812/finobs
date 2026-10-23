@@ -1,0 +1,32 @@
+name: FinObs CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff
+        run: pip install ruff==0.9.10
+
+      - name: Lint Python files
+        run: ruff check .
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Validate Docker Compose
+        run: docker compose --env-file .env -f infra/docker-compose.yml config --quiet
