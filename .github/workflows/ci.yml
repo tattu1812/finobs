@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main,tu]
+    branches: [main,tu, tattu/3-iceberg-trino]
 
 jobs:
   lint-and-validate:
