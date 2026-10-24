@@ -147,6 +147,8 @@ services:
     ports:
       - "7077:7077"
       - "${SPARK_UI_PORT:-8080}:8080"
+    volumes:
+      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
     networks:
       - finobs-network
   iceberg-init:
@@ -211,6 +213,37 @@ services:
       --memory 1G
     depends_on:
       - spark-master
+    volumes:
+      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+    networks:
+      - finobs-network
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: finobs-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    networks:
+      - finobs-network
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: finobs-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
     networks:
       - finobs-network
 
@@ -220,6 +253,8 @@ volumes:
   iceberg_catalog_data:
   airflow_postgres_data:
   marquez_postgres_data:
+  prometheus_data:
+  grafana_data:
 networks:
   finobs-network:
     driver: bridge
