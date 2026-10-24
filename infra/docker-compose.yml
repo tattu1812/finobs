@@ -52,6 +52,56 @@ services:
       - "${SPARK_UI_PORT:-8080}:8080"
     networks:
       - finobs-network
+  iceberg-init:
+    image: alpine:3.20
+    container_name: finobs-iceberg-init
+    user: root
+    command: ["sh", "-c", "chown -R 1000:1000 /var/lib/iceberg"]
+    volumes:
+      - iceberg_catalog_data:/var/lib/iceberg
+    restart: "no"
+    networks:
+      - finobs-network
+
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: finobs-iceberg-rest
+    depends_on:
+      minio:
+        condition: service_started
+      iceberg-init:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://finobs-warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_URI: jdbc:sqlite:/var/lib/iceberg/catalog.db
+    volumes:
+      - iceberg_catalog_data:/var/lib/iceberg
+    networks:
+      - finobs-network
+
+  trino:
+    image: trinodb/trino:477
+    container_name: finobs-trino
+    depends_on:
+      - iceberg-rest
+    ports:
+      - "8081:8080"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./configs/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    networks:
+      - finobs-network
 
   spark-worker:
     image: apache/spark:3.5.3
@@ -70,6 +120,7 @@ services:
 volumes:
   kafka_data:
   minio_data:
+  iceberg_catalog_data:
 
 networks:
   finobs-network:
