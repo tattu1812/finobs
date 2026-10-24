@@ -1,0 +1,65 @@
+# FinObs Helm chart - Sprint 2 draft
+# Cau hinh phac thao, chua san sang trien khai production.
+
+global:
+  environment: dev
+
+kafka:
+  enabled: true
+  image:
+    repository: apache/kafka
+    tag: "3.9.1"
+  service:
+    port: 9092
+
+minio:
+  enabled: true
+  service:
+    apiPort: 9000
+    consolePort: 9001
+  persistence:
+    enabled: true
+    size: 10Gi
+
+spark:
+  enabled: true
+  image:
+    repository: apache/spark
+    tag: "3.5.3"
+  master:
+    port: 7077
+    webPort: 8080
+  worker:
+    replicas: 1
+
+iceberg:
+  enabled: true
+  catalog:
+    type: rest
+    port: 8181
+  warehouse: s3://finobs-warehouse/
+
+trino:
+  enabled: true
+  image:
+    repository: trinodb/trino
+    tag: "477"
+  service:
+    port: 8080
+
+airflow:
+  enabled: true
+  image:
+    repository: apache/airflow
+    tag: "2.10.5-python3.11"
+  executor: LocalExecutor
+  webserver:
+    port: 8080
+
+marquez:
+  enabled: true
+  image:
+    repository: marquezproject/marquez
+    tag: "0.50.0"
+  service:
+    port: 5000
