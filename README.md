@@ -110,3 +110,93 @@ Mỗi thành viên thực hiện:
 Nếu cổng đã được ứng dụng khác sử dụng, kiểm tra và điều chỉnh cấu hình theo hướng dẫn của nhóm trước khi chạy lại.
 
 
+## 8. Iceberg + Trino(S2)
+Bổ sung Apache Iceberg REST Catalog và Trino vào hạ tầng FinObs. Cấu hình nằm trên nhánh tattu/3-iceberg-trino
+
+### 8.1. Các thành phần: MinIO, Iceberg REST Catalog, SQLite, Trino, iceberg-init
+### 8.2. Chuẩn bị MinIO
+1. Truy cập MinIO Console tại http://localhost:9001.
+
+2. Đăng nhập bằng thông tin trong file .env.
+
+3. Mở mục Buckets.
+
+4. Tạo bucket có tên finobs-warehouse.
+### 8.3. Khởi động
+Chạy lần lượt các lệnh:
+
+make check -> make up -> make ps
+
+Các dịch vụ bổ sung gồm:
+
+
+Iceberg REST Catalog -> http://localhost:8181
+
+Trino HTTP endpoint -> http://localhost:8081
+
+MinIO Console -> http://localhost:9001
+
+iceberg-init kết thúc với trạng thái Exited (0) là bình thường, vì container này chỉ thực hiện bước khởi tạo quyền cho volume.
+### 8.4. Kiểm tra kết nối Iceberg
+```bash
+docker exec finobs-trino trino --execute "SHOW CATALOGS"
+```
+Kết quả cần có catalog iceberg.
+
+### 8.5. Tạo schema và bảng mẫu
+```bash
+docker exec finobs-trino trino --execute \
+"CREATE SCHEMA iceberg.finobs_test
+WITH (location = 's3://finobs-warehouse/finobs_test/')"
+
+docker exec finobs-trino trino --execute \
+"CREATE TABLE iceberg.finobs_test.transactions (
+    transaction_id BIGINT,
+    amount DOUBLE,
+    status VARCHAR
+)"
+```
+Các lệnh tạo schema và bảng chỉ cần chạy một lần. Nếu đối tượng đã tồn tại, bỏ qua bước tạo tương ứng.
+
+### 8.6. Ghi và truy vấn dữ liệu
+```bash
+docker exec finobs-trino trino --execute \
+"INSERT INTO iceberg.finobs_test.transactions
+VALUES
+    (1, 150.50, 'SUCCESS'),
+    (2, 299.99, 'SUCCESS'),
+    (3, 75.00, 'FAILED')"
+
+docker exec finobs-trino trino --execute \
+"SELECT transaction_id, amount, status
+FROM iceberg.finobs_test.transactions
+ORDER BY transaction_id"
+```
+Kết quả mẫu:
+
+"1","150.5","SUCCESS"
+"2","299.99","SUCCESS"
+"3","75.0","FAILED"
+
+Lưu ý: Chạy lại lệnh INSERT sẽ thêm các bản ghi trùng ID vì bảng mẫu chưa khai báo ràng buộc duy nhất.
+
+### 8.7. Kiểm tra dữ liệu sau khi tạo lại Iceberg REST Catalog
+```bash
+docker compose --env-file .env -f infra/docker-compose.yml \
+  up -d --force-recreate iceberg-rest
+```
+Sau đó chạy lại câu lệnh SELECT ở mục 8.6. Dữ liệu đã ghi cần tiếp tục truy vấn được.
+
+SQLite Catalog được lưu trong Docker named volume iceberg_catalog_data, còn dữ liệu bảng được lưu trong MinIO. Không chạy docker compose down -v nếu muốn giữ dữ liệu.
+
+### 8.8. Lưu ý triển khai
+
+Đây là cấu hình phục vụ môi trường phát triển và demo, chưa phải cấu hình production.
+
+Bucket finobs-warehouse hiện cần tạo thủ công.
+
+Không commit .env hoặc mật khẩu thật.
+
+Trino sử dụng cổng 8081 trên máy host để tránh xung đột với Spark Master UI ở cổng 8080.
+
+Cảnh báo Unable to create a system terminal, creating a dumb terminal từ Trino CLI không ảnh hưởng đến kết quả truy vấn.
