@@ -1,4 +1,101 @@
 services:
+  marquez-api:
+    image: marquezproject/marquez:0.50.0
+    container_name: finobs-marquez-api
+    depends_on:
+      marquez-postgres:
+        condition: service_healthy
+    environment:
+      MARQUEZ_CONFIG: /usr/src/app/marquez.finobs.yml
+      MARQUEZ_DB_PASSWORD: ${MARQUEZ_DB_PASSWORD}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./configs/marquez/marquez.yml:/usr/src/app/marquez.finobs.yml:ro
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  marquez-postgres:
+    image: postgres:16
+    container_name: finobs-marquez-postgres
+    environment:
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD}
+      POSTGRES_DB: marquez
+    volumes:
+      - marquez_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marquez -d marquez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-postgres:
+    image: postgres:16
+    container_name: finobs-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finobs-network
+  airflow-webserver:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-webserver
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: webserver
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-scheduler:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-scheduler
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: scheduler
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-init:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    command: db migrate
+    restart: "no"
+    networks:
+      - finobs-network
   kafka:
     image: apache/kafka:3.9.1
     hostname: kafka
@@ -121,7 +218,8 @@ volumes:
   kafka_data:
   minio_data:
   iceberg_catalog_data:
-
+  airflow_postgres_data:
+  marquez_postgres_data:
 networks:
   finobs-network:
     driver: bridge
