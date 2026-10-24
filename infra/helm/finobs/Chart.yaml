@@ -1,0 +1,6 @@
+apiVersion: v2
+name: finobs
+description: Helm chart phac thao ha tang FinObs tren Kubernetes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
