@@ -1,0 +1,22 @@
+\section{Evaluation Plan}
+\label{sec:evaluation}
+% TODO: Confirm definitions and protocols with the Evaluation & Docs owner.
+A reproducible evaluation plan will define labeled fault scenarios,
+controlled experiments, appropriate baselines, and timing and classification metrics.
+Table~\ref{tab:metrics} lists candidate measurements; no results are reported here.
+
+\begin{table}[t]
+  \caption{Candidate Evaluation Metrics (to be finalized)}
+  \label{tab:metrics}
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    Metric & Intended measurement \\
+    \midrule
+    MTTD & Mean time to detect \\
+    MTTDiag & Mean time to diagnose \\
+    Precision / Recall / F1 & Incident detection quality \\
+    AC@k & Root-cause ranking accuracy \\
+    \bottomrule
+  \end{tabular}
+\end{table}
