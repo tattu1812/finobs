@@ -1,0 +1,17 @@
+{
+  "_comment": "20 mã: 6 mã trùng 2 sàn, 4 mã crypto thanh khoản thấp, 10 mã VN30 (dùng ở script vnstock riêng).",
+
+  "binance": [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT",
+    "ALGOUSDT", "ZILUSDT", "ONEUSDT", "CELRUSDT"
+  ],
+
+  "coinbase": [
+    "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD",
+    "ALGO-USD", "SKL-USD", "BAND-USD", "CTSI-USD"
+  ],
+
+  "vnstock": [
+    "FPT", "HPG", "VCB", "VNM", "SSI", "MWG", "TCB", "VIC", "MBB", "STB"
+  ]
+}

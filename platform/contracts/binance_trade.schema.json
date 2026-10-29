@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://finobs.example/contracts/binance_trade.schema.json",
+  "title": "Binance trade (raw event)",
+  "description": "Bản ghi source=binance: vỏ chung + payload stream <symbol>@trade. Ràng buộc rút ra từ 203 732 bản ghi thu ngày 2026-10-27.",
+  "allOf": [{ "$ref": "raw_event.schema.json" }],
+  "properties": {
+    "source": { "const": "binance" },
+    "symbol_native": {
+      "description": "Binance viết liền BASEQUOTE, chữ hoa (vd BTCUSDT).",
+      "type": "string",
+      "pattern": "^[A-Z0-9]+$"
+    },
+    "transport": {
+      "description": "Mỗi message WebSocket là đúng 1 trade, sàn không đánh số message.",
+      "properties": {
+        "batch_size": { "const": 1 },
+        "msg_seq": { "type": "null" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["e", "E", "s", "t", "p", "q", "T", "m", "M"],
+      "properties": {
+        "e": { "description": "Loại sự kiện.", "const": "trade" },
+        "E": { "description": "Event time: lúc sàn phát message (epoch ms).", "$ref": "#/$defs/epoch_ms" },
+        "s": { "description": "Mã, trùng symbol_native.", "type": "string", "pattern": "^[A-Z0-9]+$" },
+        "t": { "description": "Trade id, liên tục theo mã.", "type": "integer", "minimum": 0 },
+        "p": { "description": "Giá.", "$ref": "#/$defs/decimal_8" },
+        "q": { "description": "Khối lượng.", "$ref": "#/$defs/decimal_8" },
+        "T": { "description": "Trade time: lúc khớp (epoch ms) — nguồn của event_time.", "$ref": "#/$defs/epoch_ms" },
+        "m": { "description": "true nếu bên mua là maker.", "type": "boolean" },
+        "M": { "description": "Cờ 'best price match', tài liệu Binance ghi là bỏ qua.", "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "epoch_ms": {
+      "type": "integer",
+      "minimum": 1000000000000,
+      "maximum": 9999999999999
+    },
+    "decimal_8": {
+      "description": "Binance luôn gửi đúng 8 chữ số thập phân (100% mẫu). Đổi độ chính xác = thay đổi contract của sàn, phải bị phát hiện.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{8}$"
+    }
+  }
+}
