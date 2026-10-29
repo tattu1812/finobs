@@ -1,0 +1,169 @@
+catalog_version: 1
+
+metrics:
+  - name: last_live_trade_age_seconds
+    pillar: freshness
+    description: "Đã bao lâu kể từ khi máy thu nhận trade live mới nhất?"
+    group_by: [source, symbol_canonical]
+    required_fields:
+      - event_id
+      - ingest_time
+    optional_fields: [transport.is_snapshot]
+    filter: "transport.is_snapshot is absent or false"
+    deduplicate_by: event_id
+    formula: "observed_at - max(ingest_time)"
+    compute_every: "1m"
+    unit: seconds
+    when_no_trade_ever: null
+
+  - name: ingest_delay_p95_ms
+    pillar: freshness
+    description: "Phân vị 95% độ trễ nhận trade trong một phút."
+    group_by: [source, symbol_canonical]
+    required_fields:
+      - event_id
+      - event_time
+      - ingest_time
+    optional_fields: [transport.is_snapshot]
+    filter: "transport.is_snapshot is absent or false"
+    deduplicate_by: event_id
+    formula: "p95(ingest_time - event_time)"
+    window: "1m"
+    compute_every: "1m"
+    unit: milliseconds
+    when_no_trade_in_window: null
+  - name: trade_count_1m
+    pillar: volume
+    description: "Số trade live khác nhau máy thu nhận trong một phút."
+    group_by: [source, symbol_canonical]
+    required_fields:
+      - event_id
+      - ingest_time
+    optional_fields: [transport.is_snapshot]
+    filter: "transport.is_snapshot is absent or false"
+    deduplicate_by: event_id
+    formula: "count_distinct(event_id) trong cửa sổ ingest_time 1 phút"
+    window: "1m"
+    compute_every: "1m"
+    unit: trades
+    when_window_observed_but_empty: 0
+    when_source_unavailable: null
+
+  - name: received_bytes_1m
+    pillar: volume
+    description: "Số byte message gốc recorder nhận trong một phút."
+    group_by: [source]
+    input: recorder_message
+    required_fields: [source, received_at, raw_bytes]
+    formula: "sum(raw_bytes) một lần cho mỗi message nhận trong phút"
+    window: "1m"
+    compute_every: "1m"
+    unit: bytes
+    status: needs_recorder_instrumentation
+  - name: price_p50_5m
+    pillar: distribution
+    description: "Trung vị giá trade live nhận trong 5 phút."
+    group_by: [source, symbol_canonical]
+    value_field_by_source:
+      binance: payload.p
+      coinbase: payload.price
+    numeric_type: decimal
+    filter: "transport.is_snapshot is absent or false"
+    deduplicate_by: event_id
+    formula: "median(price) theo cửa sổ ingest_time 5 phút"
+    window: "5m"
+    compute_every: "1m"
+    unit: quote_currency_per_base
+    when_no_trade_in_window: null
+    include_sample_count: true
+
+  - name: trade_size_p95_5m
+    pillar: distribution
+    description: "Phân vị 95% kích thước trade live nhận trong 5 phút."
+    group_by: [source, symbol_canonical]
+    value_field_by_source:
+      binance: payload.q
+      coinbase: payload.size
+    numeric_type: decimal
+    filter: "transport.is_snapshot is absent or false"
+    deduplicate_by: event_id
+    formula: "p95(size) theo cửa sổ ingest_time 5 phút"
+    window: "5m"
+    compute_every: "1m"
+    unit: base_asset_units
+    when_no_trade_in_window: null
+    include_sample_count: true
+  - name: contract_violation_count_1m
+    pillar: schema
+    description: "Số bản ghi raw không đạt contract trong một phút."
+    input: validation_result
+    group_by: [source]
+    required_result_fields: [checked_at, source, is_valid]
+    formula: "count(records where is_valid == false)"
+    window_by: checked_at
+    window: "1m"
+    compute_every: "1m"
+    unit: records
+    when_no_records_checked: null
+
+  - name: contract_violation_rate_1m
+    pillar: schema
+    description: "Tỷ lệ bản ghi raw không đạt contract trong một phút."
+    input: validation_result
+    group_by: [source]
+    required_result_fields: [checked_at, source, is_valid]
+    formula: "count(is_valid == false) / count(all records checked)"
+    window_by: checked_at
+    window: "1m"
+    compute_every: "1m"
+    unit: ratio
+    when_no_records_checked: null
+  - name: recorder_disconnect_count_5m
+    pillar: pipeline_health
+    description: "Số lần recorder mất kết nối trong 5 phút."
+    input: recorder_ops_log
+    group_by: [source]
+    source_from: ops_log_filename
+    timestamp_field: ts
+    event_field: kind
+    matching_kind: disconnected
+    formula: "count(log entries where kind == 'disconnected')"
+    window: "5m"
+    compute_every: "1m"
+    unit: events
+    when_log_readable_but_no_match: 0
+    when_log_unavailable: null
+
+  - name: recorder_error_count_5m
+    pillar: pipeline_health
+    description: "Số lỗi recorder ghi nhận trong 5 phút."
+    input: recorder_ops_log
+    group_by: [source]
+    source_from: ops_log_filename
+    timestamp_field: ts
+    event_field: kind
+    matching_kinds: [idle_timeout, request_error]
+    formula: "count(log entries where kind in ['idle_timeout', 'request_error'])"
+    window: "5m"
+    compute_every: "1m"
+    unit: events
+    when_log_readable_but_no_match: 0
+    when_log_unavailable: null
+  - name: cross_source_return_gap_5m
+    pillar: cross_source
+    description: "Độ chênh giữa mức biến động giá 5 phút của hai nguồn."
+    input_metrics: [price_p50_5m]
+    group_by: [comparison_pair]
+    pair_mapping: required_explicitly
+    formula: >
+      abs(
+        (price_p50_source_a_now / price_p50_source_a_previous - 1)
+        -
+        (price_p50_source_b_now / price_p50_source_b_previous - 1)
+      )
+    compare_windows: "Hai cửa sổ 5 phút liên tiếp, không chồng lấn"
+    compute_every: "5m"
+    unit: ratio
+    when_either_source_missing: null
+    when_any_price_is_zero: null
+    status: needs_pair_mapping_and_baseline
