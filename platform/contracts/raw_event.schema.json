@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://finobs.example/contracts/raw_event.schema.json",
+  "title": "finobs raw event envelope",
+  "description": "Vỏ chung mọi nguồn phải tuân thủ (contract major 1). Payload gốc của sàn nằm nguyên văn trong 'payload'; ràng buộc payload nằm ở schema riêng của từng nguồn.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "source",
+    "symbol_native",
+    "symbol_canonical",
+    "event_type",
+    "event_time",
+    "ingest_time",
+    "sequence",
+    "transport",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "SemVer của contract. File này chỉ nhận major 1.",
+      "type": "string",
+      "pattern": "^1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "event_id": {
+      "description": "<source>:<symbol_native>:<sequence> — khoá khử trùng toàn cục.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+:[^:\\s]+:(0|[1-9][0-9]*)$"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["binance", "coinbase", "vnstock"]
+    },
+    "symbol_native": {
+      "description": "Mã đúng như sàn viết, giữ nguyên để truy ngược.",
+      "type": "string",
+      "minLength": 1
+    },
+    "symbol_canonical": {
+      "description": "Mã chuẩn hoá BASE-QUOTE, chữ hoa.",
+      "type": "string",
+      "pattern": "^[A-Z0-9]+-[A-Z0-9]+$"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["trade"]
+    },
+    "event_time": {
+      "description": "Thời điểm khớp lệnh theo đồng hồ sàn.",
+      "$ref": "#/$defs/utc_ms"
+    },
+    "ingest_time": {
+      "description": "Thời điểm recorder nhận message, theo đồng hồ máy thu.",
+      "$ref": "#/$defs/utc_ms"
+    },
+    "sequence": {
+      "description": "Số thứ tự trade của sàn (Binance t, Coinbase trade_id, VCI id).",
+      "type": "integer",
+      "minimum": 0
+    },
+    "transport": {
+      "description": "Thông tin tầng vận chuyển, không phải dữ liệu thị trường.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["batch_size", "raw_bytes", "msg_seq"],
+      "properties": {
+        "batch_size": {
+          "description": "Số trade được ghi ra từ cùng một message.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "raw_bytes": {
+          "description": "Kích thước message gốc (byte).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "msg_seq": {
+          "description": "Số thứ tự message của sàn hoặc của lần poll; null nếu nguồn không có.",
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "is_snapshot": {
+          "description": "Trade lịch sử sàn gửi khi subscribe hoặc lần poll đầu, không phải realtime.",
+          "type": "boolean"
+        },
+        "poll_interval_s": {
+          "description": "Nguồn REST: chu kỳ poll mỗi mã (giây).",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "rows_returned": {
+          "description": "Nguồn REST: số dòng API trả về trong lần poll (trước khử trùng).",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "payload": {
+      "description": "Message gốc của sàn, nguyên văn.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "utc_ms": {
+      "description": "UTC, ISO 8601, đúng 3 chữ số mili giây, hậu tố Z.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+    },
+    "decimal_string": {
+      "description": "Số thập phân không âm viết dạng chuỗi, không số mũ, không số 0 thừa ở đầu.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    }
+  }
+}
