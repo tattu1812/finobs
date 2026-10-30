@@ -25,6 +25,12 @@ jobs:
       - name: Lint Python files
         run: ruff check .
 
+      - name: Install contract validator
+        run: pip install jsonschema==4.26.0
+
+      - name: Validate data contracts (fixtures)
+        run: make validate-contracts PY=python VALIDATE_IN=tests/fixtures/raw
+
       - name: Prepare environment
         run: cp .env.example .env
 
