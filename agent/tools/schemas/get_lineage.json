@@ -1,0 +1,53 @@
+{
+  "name": "get_lineage",
+  "description": "Return the lineage graph around a dataset, read from Marquez. Use direction=upstream to find what a broken dataset depends on (candidate root causes), downstream to find what an incident affects (blast radius). Each node has its hop distance from the starting asset.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asset"],
+    "properties": {
+      "asset": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$",
+        "description": "Dataset as <namespace>:<name>, e.g. finobs:gold.ohlcv_1m"
+      },
+      "direction": { "enum": ["upstream", "downstream", "both"], "default": "upstream" },
+      "depth": { "type": "integer", "minimum": 1, "maximum": 20, "default": 10, "description": "Max number of edges to follow." }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["asset", "direction", "nodes", "edges", "datasets", "jobs"],
+    "properties": {
+      "asset": { "type": "string" },
+      "direction": { "enum": ["upstream", "downstream", "both"] },
+      "nodes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "namespace", "name", "distance"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^(dataset|job):" },
+            "kind": { "enum": ["dataset", "job"] },
+            "namespace": { "type": "string" },
+            "name": { "type": "string" },
+            "distance": { "type": "integer", "description": "Hops from asset; negative = upstream, positive = downstream." }
+          }
+        }
+      },
+      "edges": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": { "from": { "type": "string" }, "to": { "type": "string" } }
+        }
+      },
+      "datasets": { "type": "array", "items": { "type": "string" }, "description": "Other datasets reached, as <namespace>:<name>, nearest first." },
+      "jobs": { "type": "array", "items": { "type": "string" }, "description": "Jobs reached, as <namespace>:<name>, nearest first." }
+    }
+  }
+}
