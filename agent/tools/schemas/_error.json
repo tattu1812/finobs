@@ -1,0 +1,17 @@
+{
+  "description": "Kết quả khi một tool lỗi. Mọi tool đều trả dạng này thay vì ném exception, để agent đọc được và tự sửa lời gọi.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "enum": ["unknown_tool", "invalid_input", "not_found", "backend_unavailable"] },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

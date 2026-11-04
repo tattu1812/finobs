@@ -1,0 +1,55 @@
+# Ca lỗi cố ý: case_control_with_injection
+scenario_version: 1
+id: S902_control_with_injection
+title: Coinbase gửi trùng 5% trade BTC-USD và ETH-USD trong 2 phút
+fault_type: FT03_duplicate_events
+severity: medium
+description: 'Nhân bản 5% trade của BTC-USD và ETH-USD trên Coinbase trong 2 phút,
+  giữ nguyên event_id. Trong lần thu thật, hiện tượng này xảy ra lúc 02:57:01 (7 trade
+  BTC lặp lại). Window được chọn từ 03:00 để không lẫn với lần trùng thật đó. Pipeline
+  đúng phải khử trùng theo event_id: tổng khối lượng ở tầng gold không được đổi.
+
+  '
+tags:
+- observed_in_sprint1
+- coinbase
+- dedup
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources:
+  - coinbase
+  symbols:
+  - BTC-USD
+  - ETH-USD
+  window:
+    start: '2026-10-27T03:00:00.000Z'
+    end: '2026-10-27T03:30:00.000Z'
+  seed: 1
+injection:
+  injector: duplicate_records
+  target:
+    layer: source
+    asset: finobs:raw.coinbase_trades
+    source: coinbase
+    symbols:
+    - BTC-USD
+    - ETH-USD
+  start_offset_s: 600
+  duration_s: 120
+  params:
+    fraction: 0.05
+    keep_event_id: true
+    max_delay_ms: 50
+ground_truth:
+  is_incident: false
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 600
+  rca_top_k: 3
+  metrics:
+  - MTTD
+  - MTTDiag
+  - precision
+  - recall
+  - AC@k

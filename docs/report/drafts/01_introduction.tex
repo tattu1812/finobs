@@ -1,0 +1,123 @@
+% DRAFT Introduction (Sprint 1). Owner: Trung.
+% Drop-in replacement for sections/01_introduction.tex in the IEEE scaffold
+% (branch origin/trungnguyen). New BibTeX keys are in drafts/references-additions.bib;
+% merge them into references.bib together with this section.
+%
+% Rules followed: every number below is a measured Sprint 1 observation
+% (docs/sprint1/report.md). Nothing about FinObs results is claimed yet;
+% contributions are stated as goals. Lines marked TODO need team confirmation.
+
+\section{Introduction}
+\label{sec:introduction}
+
+Financial decisions increasingly rest on data that is collected, joined, and
+transformed by long chains of automated jobs. A trading dashboard, a risk report,
+or a model feature for Vietnamese equities may depend on tick streams from several
+exchanges, an ingestion service, a message queue, streaming and batch
+transformations, and a lakehouse table format~\cite{armbrust2021lakehouse}.
+Each hop can corrupt the data without failing: a job that finishes
+successfully on stale, duplicated, or mis-typed input still produces a
+plausible-looking number. Such \emph{silent data failures} are particularly costly
+in finance, where downstream consumers act on the result within seconds and
+rarely have the context to question it.
+
+Traditional monitoring watches the infrastructure (CPU, memory, job status), not
+the data. Data validation libraries close part of this gap by checking declared
+constraints on each batch~\cite{schelter2018automating}, but they assume that the
+engineer already knows which constraints matter. In practice, many incidents
+violate no single rule. They appear only as a change in freshness, volume, or
+distribution, or as a disagreement between sources that should agree. Even once an
+anomaly is detected, finding \emph{where} it originated in a multi-stage pipeline
+remains a largely manual task that requires knowledge of the lineage between
+datasets.
+
+\subsection{Why financial market data is a hard case}
+
+Market data combines several properties that make reliability difficult.
+First, it is unbounded and arrives out of order, so correctness depends on
+event-time semantics and watermarks rather than arrival order~\cite{akidau2015dataflow}.
+Second, the same asset is quoted by multiple independent sources, and those
+sources do not always agree: Li et al.~\cite{li2012truth} found substantial
+inconsistency even for seemingly objective values such as stock prices.
+Third, sources differ in protocol and semantics: push-based WebSocket feeds for
+cryptocurrency exchanges versus a rate-limited polling API for the Ho Chi Minh
+Stock Exchange (HOSE), with different time formats, precision, and trading hours.
+
+A one-hour recording collected in the first sprint of this project
+(231\,859 trades from Binance and Coinbase over 20 symbols) illustrates how quickly
+these issues surface even without any injected fault:
+\begin{itemize}
+  \item \textbf{Clock skew at the collector.} The collector clock was initially
+        1.8\,s off and kept drifting after correction. As a result,
+        32\,461 Binance trades had a \emph{negative} measured ingestion delay.
+  \item \textbf{Mid-session history replay.} Without any reconnect, Coinbase
+        re-sent historical trades as ordinary updates, some of them 19.7 hours old.
+  \item \textbf{Duplicates under load.} During a burst, Coinbase delivered the same
+        trades more than once.
+  \item \textbf{Correlated bursts.} Both exchanges peaked in the same second, at
+        43 times Binance's mean rate. This is a genuine market event that a naive
+        volume detector would flag as an incident.
+\end{itemize}
+None of these events caused a pipeline failure, and none would be caught by
+infrastructure monitoring. Each one, however, would distort a downstream latency
+SLO, a traded-volume aggregate, or a cross-exchange comparison.
+
+\subsection{Root causes are mostly about data, not code}
+
+The types of failures above are consistent with empirical studies of data
+pipelines. Foidl et al.~\cite{foidl2023pipeline} analysed developer issues and
+questions about data pipelines. They report that problems with data types are the
+most frequent root cause of data-related issues, and that ingestion, integration,
+and cleaning are the stages where developers struggle most.
+% TODO: verify the exact wording and percentages against the paper before citing numbers.
+This suggests that an observability system for financial data should be organised
+around a taxonomy of \emph{data} faults: stale feeds, partial loss, duplicates,
+replayed history, late data, clock skew, schema drift, type and precision errors,
+value anomalies, cross-source mismatch, and job failures. Each fault should be
+linked to the signals it produces and to the pipeline stage where it originates.
+
+\subsection{Research questions}
+
+FinObs investigates whether detection and diagnosis of such faults can be
+automated and evaluated reproducibly. We address three research questions:
+\begin{description}
+  \item[RQ1 (Detection).] How quickly and how precisely can per-source freshness,
+        volume, distribution, schema, and pipeline-health signals detect injected
+        data faults in a multi-source financial pipeline, measured by mean time to
+        detect (MTTD), precision, and recall?
+  \item[RQ2 (Diagnosis).] Can an agent that queries metrics, data contracts, and
+        dataset lineage locate the root-cause asset of an incident? We measure this
+        with top-$k$ accuracy (AC@$k$) and mean time to diagnose (MTTDiag).
+  \item[RQ3 (Cross-source evidence).] Does comparing independent sources of the
+        same instrument reduce false alarms on genuine market events and reveal
+        faults that single-source checks miss?
+\end{description}
+
+\subsection{Contributions}
+
+This work aims to make the following contributions.
+% TODO (team): keep only the items that are delivered by the final sprint.
+\begin{enumerate}
+  \item A \textbf{fault taxonomy} for multi-source financial data pipelines with
+        eleven fault types. It is grounded in the root-cause categories of Foidl
+        et al.~\cite{foidl2023pipeline} and in faults observed in real exchange data.
+  \item A \textbf{labelled scenario benchmark}: a YAML format that separates fault
+        injection from ground truth. The ground truth includes the root-cause
+        lineage asset, the expected signals, and signals that must \emph{not}
+        alert. The benchmark also contains negative-control scenarios built from
+        real market events.
+  \item An \textbf{observability layer} over a lakehouse pipeline that ingests
+        Binance, Coinbase, and HOSE VN30 data. It includes explicit data contracts
+        and per-source watermarks.
+  \item A \textbf{diagnosis agent} that uses tools over metrics and lineage to
+        propose ranked root causes, evaluated against the benchmark ground truth.
+\end{enumerate}
+
+\subsection{Paper organisation}
+
+Section~\ref{sec:related} reviews related work on data validation, stream
+processing, and truth discovery. Section~\ref{sec:problem} defines the problem and
+the requirements. Section~\ref{sec:architecture} describes the FinObs architecture,
+and Section~\ref{sec:methodology} the detection and diagnosis methods.
+Section~\ref{sec:evaluation} presents the evaluation protocol and
+Section~\ref{sec:results} the results. Section~\ref{sec:conclusion} concludes.
