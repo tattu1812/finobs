@@ -1,0 +1,2 @@
+-r requirements-ingest.txt
+psycopg[binary]>=3.2,<4
