@@ -1,0 +1,72 @@
+# Mô phỏng lại hiện tượng thật Sprint 1: đồng hồ máy thu lệch, sinh ra độ trễ âm.
+scenario_version: 1
+id: S003_collector_clock_skew
+title: Đồng hồ máy thu chậm 500 ms, làm Binance và Coinbase có độ trễ âm
+fault_type: FT06_clock_skew
+severity: medium
+description: >
+  Trừ 500 ms vào ingest_time của mọi bản ghi, cả hai nguồn, trong 10 phút. Với Binance
+  (độ trễ thật p50 khoảng 7 ms) hầu hết bản ghi sẽ có độ trễ âm, một điều bất khả về
+  vật lý. Điểm phân biệt với lỗi mạng là độ trễ của MỌI mã và MỌI nguồn cùng dịch một
+  lượng như nhau. Vì vậy gốc phải là máy thu (host), không phải sàn.
+tags: [observed_in_sprint1, clock, multi_source]
+
+input:
+  mode: replay
+  dataset: data/raw
+  sources: [binance, coinbase]
+  window:
+    start: "2026-10-27T03:00:00.000Z"
+    end: "2026-10-27T03:30:00.000Z"
+  seed: 3
+
+injection:
+  injector: shift_ingest_time
+  target:
+    layer: host
+    asset: "finobs:host.collector"
+  start_offset_s: 600          # 03:10:00
+  duration_s: 600
+  params:
+    offset_ms: -500
+    drift_ms_per_hour: 0
+
+ground_truth:
+  is_incident: true
+  fault_type: FT06_clock_skew
+  start_offset_s: 600
+  end_offset_s: 1200
+  root_cause:
+    asset: "finobs:host.collector"
+    component: đồng hồ hệ thống máy thu (WSL/Windows time sync)
+    explanation: >
+      Đồng hồ máy thu chậm 500 ms. Mọi ingest_time đều bị ghi sớm hơn thực tế, nên độ
+      trễ của tất cả nguồn cùng giảm 500 ms. Cả hai sàn đều không có lỗi.
+  affected_assets:
+    - "finobs:raw.binance_trades"
+    - "finobs:raw.coinbase_trades"
+  expected_signals:
+    - metric: ingest_delay_p95_ms
+      group: { source: binance }
+      direction: shift
+      catalog_status: in_catalog
+      note: giảm khoảng 500 ms, xuống giá trị âm
+    - metric: ingest_delay_p95_ms
+      group: { source: coinbase }
+      direction: shift
+      catalog_status: in_catalog
+      note: giảm khoảng 500 ms; p99 thật khoảng 272 ms nên phần lớn độ trễ cũng thành âm
+    - metric: negative_delay_ratio_1m
+      group: { source: binance }
+      direction: up
+      catalog_status: proposed
+      note: tỷ lệ bản ghi có ingest_time < event_time
+  must_not_alert:
+    - metric: trade_count_1m
+      note: số lượng trade không đổi; báo volume ở đây là false positive
+
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 600
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

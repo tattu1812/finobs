@@ -1,0 +1,46 @@
+{
+  "name": "list_alerts",
+  "description": "List alerts raised by FinObs detectors in a time window, oldest first. Start an investigation here. Alerts on downstream tables are often symptoms of an upstream problem, and some alerts are genuine market events rather than data faults.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["start", "end"],
+    "properties": {
+      "start": { "$ref": "#/$defs/utc_ms" },
+      "end": { "$ref": "#/$defs/utc_ms" },
+      "min_severity": { "enum": ["low", "medium", "high", "critical"], "default": "low" },
+      "asset": { "type": "string", "description": "Optional: only alerts on this dataset (<namespace>:<name>)." }
+    },
+    "$defs": {
+      "utc_ms": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["count", "alerts"],
+    "properties": {
+      "count": { "type": "integer", "minimum": 0 },
+      "alerts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["alert_id", "metric", "group", "asset", "detected_at", "severity", "observed", "baseline", "status", "message"],
+          "properties": {
+            "alert_id": { "type": "string" },
+            "metric": { "type": "string" },
+            "group": { "type": "object", "additionalProperties": { "type": "string" } },
+            "asset": { "type": "string" },
+            "detected_at": { "type": "string" },
+            "severity": { "enum": ["low", "medium", "high", "critical"] },
+            "observed": { "type": "number" },
+            "baseline": { "type": "number" },
+            "status": { "enum": ["open", "resolved"] },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "name": "query_metric",
+  "description": "Return per-minute values of one observability metric in a time window, one series per group (e.g. per source or per symbol). Use it to confirm an alert, compare against the baseline before the incident, or check whether another source shows the same change. A null value means the metric could not be computed for that minute.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["metric", "start", "end"],
+    "properties": {
+      "metric": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "description": "Metric name, e.g. trade_count_1m, ingest_delay_p95_ms, contract_violation_rate_1m, table_freshness_seconds"
+      },
+      "group": {
+        "type": "object",
+        "additionalProperties": { "type": "string" },
+        "description": "Optional filter; a series is returned if its group contains every key/value given, e.g. {\"source\": \"binance\"}."
+      },
+      "start": { "$ref": "#/$defs/utc_ms" },
+      "end": { "$ref": "#/$defs/utc_ms" }
+    },
+    "$defs": {
+      "utc_ms": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$", "description": "UTC, e.g. 2026-10-27T03:00:00.000Z" }
+    }
+  },
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["metric", "unit", "start", "end", "series"],
+    "properties": {
+      "metric": { "type": "string" },
+      "unit": { "type": "string" },
+      "start": { "type": "string" },
+      "end": { "type": "string" },
+      "series": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["group", "points", "summary"],
+          "properties": {
+            "group": { "type": "object", "additionalProperties": { "type": "string" } },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["ts", "value"],
+                "properties": { "ts": { "type": "string" }, "value": { "type": ["number", "null"] } }
+              }
+            },
+            "summary": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count", "min", "max", "mean"],
+              "properties": {
+                "count": { "type": "integer", "minimum": 0 },
+                "min": { "type": ["number", "null"] },
+                "max": { "type": ["number", "null"] },
+                "mean": { "type": ["number", "null"] }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
