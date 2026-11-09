@@ -1,158 +1,479 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://finobs.example/evaluation/scenario.schema.json",
-  "title": "FinObs evaluation scenario",
-  "description": "Một kịch bản lỗi có ground truth. Xem evaluation/scenarios/README.md.",
+  "$id": "https://raw.githubusercontent.com/tattu1812/finobs/main/evaluation/scenarios/scenario.schema.json",
+  "title": "FinObs evaluation scenario – Sprint 2, schema version 1",
+  "description": "Cấu trúc chung của một scenario tiêm lỗi hoặc đối chứng; mỗi scenario sự cố có một fault_type chính theo cơ chế tiêm. Ground truth chỉ dành cho evaluation harness, không được cung cấp cho detector/RCA agent. Phiên bản 1 kế thừa khung khanhsprint1 (6258641) và thêm FT12 Null Spike.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["scenario_version", "id", "title", "fault_type", "description", "input", "injection", "ground_truth", "evaluation"],
+  "required": [
+    "scenario_version",
+    "id",
+    "title",
+    "fault_type",
+    "description",
+    "input",
+    "injection",
+    "ground_truth",
+    "evaluation"
+  ],
   "properties": {
-    "scenario_version": { "const": 1 },
+    "scenario_version": {
+      "const": 1,
+      "description": "Phiên bản cấu trúc hiện hành; giữ 1 do các file hiện có vẫn tương thích."
+    },
     "id": {
       "type": "string",
-      "pattern": "^S[0-9]{3}_[a-z0-9_]+$",
-      "description": "Trùng với tên file (không có đuôi .yaml)."
+      "pattern": "^S[0-9]{3,}_[a-z0-9_]+$",
+      "description": "Trùng với tên file bỏ đuôi .yaml; kiểm tra trùng tên trong validate.py. Từ 3 chữ số trở lên để mở rộng số lượng scenario."
     },
-    "title": { "type": "string", "minLength": 5 },
-    "fault_type": { "$ref": "#/$defs/fault_type" },
-    "severity": { "enum": ["low", "medium", "high", "critical"] },
-    "description": { "type": "string", "minLength": 20 },
-    "tags": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-
+    "title": {
+      "type": "string",
+      "minLength": 5
+    },
+    "fault_type": {
+      "$ref": "#/$defs/fault_type"
+    },
+    "severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 0,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "sources", "window"],
+      "required": [
+        "mode",
+        "sources",
+        "window"
+      ],
       "properties": {
         "mode": {
-          "enum": ["replay", "synthetic"],
-          "description": "replay: phát lại dữ liệu thu thật; synthetic: dữ liệu sinh."
+          "enum": [
+            "replay",
+            "synthetic"
+          ],
+          "description": "replay: phát lại dữ liệu tham chiếu; synthetic: dữ liệu được sinh."
         },
-        "dataset": { "type": "string", "description": "Đường dẫn dữ liệu nguồn khi mode = replay." },
+        "dataset": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Đường dẫn dữ liệu nguồn; bắt buộc khi mode = replay. JSON Schema kiểm tra cú pháp, không xác nhận file tồn tại."
+        },
         "sources": {
-          "type": "array", "minItems": 1, "uniqueItems": true,
-          "items": { "enum": ["binance", "coinbase", "vnstock"] }
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "binance",
+              "coinbase",
+              "vnstock"
+            ]
+          }
         },
-        "symbols": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "window": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["start", "end"],
+          "required": [
+            "start",
+            "end"
+          ],
           "properties": {
-            "start": { "$ref": "#/$defs/utc_ms" },
-            "end": { "$ref": "#/$defs/utc_ms" }
-          }
+            "start": {
+              "$ref": "#/$defs/utc_ms"
+            },
+            "end": {
+              "$ref": "#/$defs/utc_ms"
+            }
+          },
+          "description": "Mốc window.start để quy đổi tất cả *_offset_s sang thời gian thực."
         },
-        "seed": { "type": "integer", "minimum": 0 }
-      }
-    },
-
-    "injection": {
-      "description": "null với kịch bản đối chứng (is_incident = false).",
-      "oneOf": [
-        { "type": "null" },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Random seed khuyến nghị để tái lập các thao tác ngẫu nhiên."
+        }
+      },
+      "allOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["injector", "target", "start_offset_s", "duration_s"],
-          "properties": {
-            "injector": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-            "target": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["layer", "asset"],
-              "properties": {
-                "layer": { "enum": ["source", "raw", "kafka", "bronze", "silver", "gold", "host"] },
-                "asset": { "$ref": "#/$defs/asset" },
-                "source": { "enum": ["binance", "coinbase", "vnstock"] },
-                "symbols": { "type": "array", "items": { "type": "string" } }
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "replay"
               }
             },
-            "start_offset_s": { "type": "number", "minimum": 0 },
-            "duration_s": { "type": "number", "exclusiveMinimum": 0 },
-            "params": { "type": "object" }
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "dataset"
+            ]
           }
         }
       ]
     },
-
+    "injection": {
+      "description": "Object cho scenario có sự cố; null cho đối chứng. Tham số riêng từng injector được kiểm tra ở giai đoạn triển khai injector.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "injector",
+            "target",
+            "start_offset_s",
+            "duration_s"
+          ],
+          "properties": {
+            "injector": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "target": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "layer",
+                "asset"
+              ],
+              "properties": {
+                "layer": {
+                  "enum": [
+                    "source",
+                    "raw",
+                    "kafka",
+                    "bronze",
+                    "silver",
+                    "gold",
+                    "host"
+                  ]
+                },
+                "asset": {
+                  "$ref": "#/$defs/asset"
+                },
+                "source": {
+                  "enum": [
+                    "binance",
+                    "coinbase",
+                    "vnstock"
+                  ]
+                },
+                "symbols": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "start_offset_s": {
+              "type": "number",
+              "minimum": 0
+            },
+            "duration_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "params": {
+              "type": "object",
+              "description": "Tham số theo injector (chẳng hạn fraction/field/offset_ms); chưa khóa tên injector cho FT12 khi chưa có contract runtime."
+            }
+          }
+        }
+      ]
+    },
     "ground_truth": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["is_incident"],
+      "required": [
+        "is_incident"
+      ],
       "properties": {
-        "is_incident": { "type": "boolean" },
-        "fault_type": { "$ref": "#/$defs/fault_type" },
-        "start_offset_s": { "type": "number", "minimum": 0 },
-        "end_offset_s": { "type": "number", "exclusiveMinimum": 0 },
+        "is_incident": {
+          "type": "boolean"
+        },
+        "fault_type": {
+          "$ref": "#/$defs/fault_type"
+        },
+        "start_offset_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_offset_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "root_cause": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["asset", "component", "explanation"],
+          "required": [
+            "asset",
+            "component",
+            "explanation"
+          ],
           "properties": {
-            "asset": { "$ref": "#/$defs/asset" },
-            "component": { "type": "string" },
-            "explanation": { "type": "string", "minLength": 10 }
-          }
-        },
-        "affected_assets": { "type": "array", "items": { "$ref": "#/$defs/asset" }, "uniqueItems": true },
-        "expected_signals": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["metric", "direction"],
-            "properties": {
-              "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-              "group": { "type": "object", "additionalProperties": { "type": "string" } },
-              "direction": { "enum": ["up", "down", "shift", "violation", "non_zero", "stable"] },
-              "note": { "type": "string" },
-              "catalog_status": {
-                "enum": ["in_catalog", "proposed"],
-                "description": "proposed: metric chưa có trong observability/metric_catalog.yaml."
-              }
+            "asset": {
+              "$ref": "#/$defs/asset"
+            },
+            "component": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Thành phần gây lỗi hoặc vị trí tiêm được biết trước; không nhất thiết trùng tên dataset."
+            },
+            "explanation": {
+              "type": "string",
+              "minLength": 10
             }
           }
         },
-        "must_not_alert": {
+        "affected_assets": {
           "type": "array",
-          "description": "Tín hiệu mà detector KHÔNG được báo; báo là false positive.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/asset"
+          },
+          "description": "Các asset bị ảnh hưởng; có thể gồm root-cause asset, chưa mặc định chỉ là downstream."
+        },
+        "expected_signals": {
+          "type": "array",
+          "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["metric"],
+            "required": [
+              "metric",
+              "direction"
+            ],
             "properties": {
-              "metric": { "type": "string" },
-              "group": { "type": "object", "additionalProperties": { "type": "string" } },
-              "note": { "type": "string" }
+              "metric": {
+                "$ref": "#/$defs/metric_name"
+              },
+              "group": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "direction": {
+                "enum": [
+                  "up",
+                  "down",
+                  "shift",
+                  "violation",
+                  "non_zero",
+                  "stable"
+                ]
+              },
+              "note": {
+                "type": "string"
+              },
+              "catalog_status": {
+                "enum": [
+                  "in_catalog",
+                  "proposed"
+                ],
+                "description": "in_catalog: xác nhận có trong metric catalog; proposed: metric đề xuất, chưa hỗ trợ chính thức."
+              }
+            }
+          },
+          "description": "Dấu hiệu kỳ vọng; metric chưa có trong catalog phải được đánh dấu proposed."
+        },
+        "must_not_alert": {
+          "type": "array",
+          "description": "Những tín hiệu không được báo động trong phạm vi đánh giá đã nêu.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "metric"
+            ],
+            "properties": {
+              "metric": {
+                "$ref": "#/$defs/metric_name"
+              },
+              "group": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "note": {
+                "type": "string"
+              }
             }
           }
         }
       },
-      "if": { "properties": { "is_incident": { "const": true } } },
-      "then": { "required": ["fault_type", "start_offset_s", "end_offset_s", "root_cause", "affected_assets", "expected_signals"] },
-      "else": { "not": { "anyOf": [{ "required": ["root_cause"] }, { "required": ["expected_signals"] }] } }
+      "if": {
+        "required": [
+          "is_incident"
+        ],
+        "properties": {
+          "is_incident": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "fault_type",
+          "start_offset_s",
+          "end_offset_s",
+          "root_cause",
+          "affected_assets",
+          "expected_signals"
+        ]
+      },
+      "else": {
+        "description": "Đối chứng không có root cause, fault_type Ground Truth hoặc khoảng thời gian sự cố. fault_type cấp scenario chỉ mang nghĩa detector category.",
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "fault_type"
+              ]
+            },
+            {
+              "required": [
+                "start_offset_s"
+              ]
+            },
+            {
+              "required": [
+                "end_offset_s"
+              ]
+            },
+            {
+              "required": [
+                "root_cause"
+              ]
+            },
+            {
+              "required": [
+                "affected_assets"
+              ]
+            },
+            {
+              "required": [
+                "expected_signals"
+              ]
+            }
+          ]
+        }
+      }
     },
-
     "evaluation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["metrics"],
+      "required": [
+        "metrics"
+      ],
       "properties": {
-        "detect_within_s": { "type": "number", "exclusiveMinimum": 0 },
-        "diagnose_within_s": { "type": "number", "exclusiveMinimum": 0 },
-        "rca_top_k": { "type": "integer", "minimum": 1 },
+        "detect_within_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "diagnose_within_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "rca_top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Độ sâu top-k dùng khi chấm RCA, không phải danh sách dự đoán từ agent."
+        },
         "metrics": {
-          "type": "array", "minItems": 1, "uniqueItems": true,
-          "items": { "enum": ["MTTD", "MTTDiag", "precision", "recall", "F1", "AC@k", "false_positive_count"] }
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "MTTD",
+              "MTTDiag",
+              "precision",
+              "recall",
+              "F1",
+              "AC@k",
+              "false_positive_count"
+            ]
+          }
         }
       }
     }
   },
-
+  "allOf": [
+    {
+      "description": "is_incident = true phải có injection object; false phải có injection = null.",
+      "if": {
+        "required": [
+          "ground_truth"
+        ],
+        "properties": {
+          "ground_truth": {
+            "required": [
+              "is_incident"
+            ],
+            "properties": {
+              "is_incident": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "injection": {
+            "type": "object"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "injection": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "fault_type": {
-      "description": "Mã lỗi; nguồn gốc ở evaluation/fault_taxonomy.md.",
+      "description": "Chỉ có một mã chính cho mỗi scenario sự cố; mã phải đồng bộ với evaluation/fault_taxonomy.md.",
       "enum": [
         "FT01_stale_feed",
         "FT02_volume_loss",
@@ -164,17 +485,24 @@
         "FT08_type_precision",
         "FT09_value_anomaly",
         "FT10_cross_source_mismatch",
-        "FT11_pipeline_failure"
+        "FT11_pipeline_failure",
+        "FT12_null_spike"
       ]
     },
     "asset": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$",
-      "description": "Node lineage dạng <namespace>:<tên>, ví dụ finobs:raw.coinbase_trades."
+      "description": "Asset ID dạng <namespace>:<name>, ví dụ finobs:raw.coinbase_trades. Không xác minh tài nguyên thực tồn tại."
+    },
+    "metric_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
     },
     "utc_ms": {
       "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$",
+      "format": "date-time",
+      "description": "UTC timestamp có đúng 3 chữ số mili giây, ví dụ 2026-10-27T03:00:00.000Z. Validator cần FormatChecker hoặc parse UTC để bắt ngày thực không tồn tại."
     }
   }
 }

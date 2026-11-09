@@ -1,16 +1,16 @@
-# Lỗi chưa gặp thật, nhưng là nhóm nguyên nhân gốc phổ biến nhất theo Foidl et al. (kiểu dữ liệu).
+# Kịch bản giả lập vi phạm payload contract của Binance; không khẳng định sàn đã thay đổi API thực tế.
 scenario_version: 1
 id: S002_binance_schema_drift
-title: Binance đổi trade id sang chuỗi và đổi tên trường giá trên ETHUSDT
+title: Mô phỏng drift trade id và tên trường giá trên đầu vào Binance ETHUSDT
 fault_type: FT07_schema_drift
 severity: high
 description: >
-  Từ phút thứ 5, payload của ETHUSDT trên Binance có trường "t" (trade id) đổi từ
-  integer sang chuỗi, và trường "p" bị đổi tên thành "price". Lỗi chỉ xảy ra ở một mã
-  của một nguồn, và kéo dài tới hết window. Detector phải báo vi phạm contract của
-  Binance, còn agent phải chỉ ra node lineage raw của Binance là gốc.
+  Từ phút thứ 5, giả lập payload ETHUSDT của Binance có trường "t" (trade id)
+  đổi từ integer sang chuỗi và trường "p" đổi tên thành "price". Lỗi chỉ xảy
+  ra ở một mã của một nguồn, kéo dài tới hết window. Detector cần nhận diện
+  vi phạm contract của Binance; RCA cần chỉ ra raw Binance là asset gốc được
+  khai báo trong kịch bản tiêm lỗi.
 tags: [contract, binance]
-
 input:
   mode: replay
   dataset: data/raw/binance/2026-10-27
@@ -20,7 +20,6 @@ input:
     start: "2026-10-27T03:00:00.000Z"
     end: "2026-10-27T03:20:00.000Z"
   seed: 2
-
 injection:
   injector: mutate_payload
   target:
@@ -33,7 +32,6 @@ injection:
   params:
     rename_fields: { p: price }
     cast_fields: { t: string }
-
 ground_truth:
   is_incident: true
   fault_type: FT07_schema_drift
@@ -41,10 +39,11 @@ ground_truth:
   end_offset_s: 1200
   root_cause:
     asset: "finobs:raw.binance_trades"
-    component: Binance WebSocket API (<symbol>@trade)
+    component: điểm tiêm mutate_payload ở luồng đầu vào Binance ETHUSDT
     explanation: >
-      Sàn đổi cấu trúc payload mà không báo trước. Bản ghi không còn khớp
-      binance_trade.schema.json (thiếu "p", sai kiểu "t"). BTCUSDT không bị ảnh hưởng.
+      Benchmark chủ động đổi cấu trúc payload, khiến bản ghi không khớp
+      binance_trade.schema.json (thiếu "p", sai kiểu "t"). BTCUSDT không bị
+      thay đổi. Đây là lỗi payload được tiêm, không phải sự kiện API thực tế.
   affected_assets:
     - "finobs:raw.binance_trades"
     - "finobs:bronze.trades"
@@ -61,7 +60,6 @@ ground_truth:
   must_not_alert:
     - metric: contract_violation_rate_1m
       group: { source: coinbase }
-
 evaluation:
   detect_within_s: 120
   diagnose_within_s: 600
