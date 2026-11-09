@@ -1,150 +1,137 @@
-# Phân loại lỗi dữ liệu FinObs
+# FinObs Fault Taxonomy (FT01–FT12)
 
-Đây là bộ nhãn lỗi chung cho cả nhóm: kịch bản đánh giá (`evaluation/scenarios/`), injector,
-detector và agent chẩn đoán đều dùng đúng các mã `FTxx_*` dưới đây. Kịch bản nào cũng phải
-gắn một mã trong bảng (`scenario.schema.json` kiểm tra điều này).
+## 1. Mục đích và cơ sở phân loại
 
-**Cơ sở.** Khung phân loại bám theo Foidl et al. (2023), *Data Pipeline Quality: Influencing
-Factors, Root Causes of Data-related Issues, and Processing Problem Areas for Developers*
-(arXiv:2309.07067). Bài này phân tích issue trên GitHub và câu hỏi trên Stack Overflow để tìm
-nguyên nhân gốc của lỗi dữ liệu trong pipeline. Hai kết luận ảnh hưởng trực tiếp tới bảng này:
+Bộ phân loại lỗi (fault taxonomy) xác định **12 cơ chế lỗi dữ liệu và pipeline** có thể tạo ra có kiểm soát trong FinObs. Mỗi loại mô tả rõ bản chất lỗi, cơ chế phát sinh, nguyên nhân gốc, vị trí, hậu quả, tín hiệu quan sát dự kiến và ví dụ tiêm lỗi. Taxonomy hỗ trợ thiết kế kịch bản kiểm thử và đối chiếu kết quả chẩn đoán với Ground Truth.
 
-1. Lỗi về **kiểu dữ liệu** là nhóm nguyên nhân gốc gặp nhiều nhất. FinObs vì vậy tách riêng
-   lỗi đổi cấu trúc (FT07) và lỗi kiểu/độ chính xác (FT08).
-2. Lập trình viên gặp khó nhiều nhất ở các giai đoạn **ingestion, integration và cleaning**.
-   Phần lớn mã lỗi dưới đây rơi vào ba giai đoạn này.
+Cách phân loại được FinObs xây dựng dựa trên kiến trúc thu thập, truyền, xử lý và đối chiếu dữ liệu tài chính, đồng thời tham khảo nghiên cứu **Foidl et al. (2023), _Data Pipeline Quality: Influencing Factors, Root Causes of Data-related Issues, and Processing Problem Areas for Developers_** ([arXiv:2309.07067](https://arxiv.org/abs/2309.07067)). **FT01–FT12 là taxonomy do FinObs đề xuất**, không phải 12 nhóm lỗi được trích nguyên văn từ bài báo. Các yếu tố ảnh hưởng chất lượng pipeline trong nghiên cứu không được xem là danh sách các lỗi tiêm trực tiếp.
 
-Mỗi lỗi được gắn với giai đoạn xử lý nơi lỗi phát sinh, theo cách chia của Foidl.
+## 2. Nguyên tắc phân loại và gắn nhãn
 
-> ⚠️ Tên nhóm và giai đoạn theo Foidl ở cột "Giai đoạn" được ghi theo cách hiểu của nhóm.
-> Cần đối chiếu lại với bản gốc trước khi đưa vào báo cáo IEEE.
+1. **Một scenario sự cố = một `fault_type` chính**, lấy từ **cơ chế được chủ động tiêm**; không suy ra mã lỗi chỉ từ biểu hiện.
+2. **Cơ chế lỗi (mechanism)** là thao tác gây bất thường, ví dụ cố ý bỏ event. **Nguyên nhân gốc (root cause)** là thành phần/logic thực sự được xác định gây lỗi trong scenario. **Tín hiệu (signal)** là metric hoặc hiện tượng mà detector có thể quan sát; không phải luôn là nguyên nhân.
+3. Trong scenario sự cố, `scenario.fault_type` và `ground_truth.fault_type` phải thống nhất. `affected_assets` có thể chứa nhiều đối tượng chịu ảnh hưởng nhưng không có nghĩa chúng đều là nguyên nhân gốc.
+4. Nếu có một lỗi chính gây nhiều triệu chứng, giữ một nhãn chính và ghi triệu chứng trong `expected_signals`. Benchmark đa lỗi hoặc nhiều root cause hợp lệ phải được thiết kế riêng.
+5. Đối chứng hợp lệ có `ground_truth.is_incident: false`, `injection: null`; trong schema hiện hành, trường `scenario.fault_type` vẫn bắt buộc, chỉ cho biết loại lỗi mà đối chứng hướng tới kiểm tra báo nhầm, **không khẳng định sự cố đã xảy ra**.
+6. Các giá trị thời gian, tỷ lệ, mức biến động trong ví dụ đều là **tham số giả lập minh họa**, không phải ngưỡng thống nhất của hệ thống.
 
-Cột "Đã gặp thật?" cho biết lỗi đã xuất hiện trong lần thu Sprint 1 (2026-10-27, 60 phút, xem
-[`docs/sprint1/summary.md`](../docs/sprint1/summary.md)) hay chưa. Lỗi đã gặp thật được ưu tiên
-viết kịch bản trước.
+## 3. Bảng tổng hợp 12 loại lỗi
 
-## Bảng tổng hợp
+| Mã lỗi | Tên lỗi | Định nghĩa | Cơ chế phát sinh | Nguyên nhân gốc điển hình | Vị trí phát sinh | Hậu quả | Tín hiệu phát hiện dự kiến | Ví dụ tiêm lỗi |
+|---|---|---|---|---|---|---|---|---|
+| `FT01_stale_feed` | Stale Feed – Ngừng cập nhật | Không có event mới trong phạm vi đáng lẽ đang hoạt động | Chặn/ngừng toàn bộ event từ một feed | Producer treo, subscription ngừng, điểm chặn dữ liệu | Source / Ingestion | Dữ liệu lỗi thời; downstream không cập nhật | Freshness age ↑, số trade/phút về 0 | Dừng feed BTCUSDT 300 giây |
+| `FT02_volume_loss` | Volume Loss – Mất một phần dữ liệu | Một phần event bị mất dù nguồn còn gửi | Bỏ sự kiện theo tỷ lệ hoặc partition | Buffer/consumer mất message, lỗi ghi | Kafka / Streaming / Ingestion | Thiếu giao dịch, sai tổng khối lượng | Volume ↓, trade-ID gap hoặc stream–batch mismatch khi có nguồn chuẩn | Bỏ 30% event trong 5 phút |
+| `FT03_duplicate_events` | Duplicate Events – Trùng bản ghi | Một event logic được ghi nhận nhiều lần | Nhân bản bản ghi/ghi lại cùng ID | Retry không idempotent, dedup lỗi | Ingestion / Cleaning | Thổi phồng count/volume nếu không dedup | Duplicate ratio ↑; raw count > distinct count | Nhân đôi 10% event giữ cùng ID |
+| `FT04_history_replay` | History Replay – Phát lại lịch sử | Event cũ được phát lại ngoài chính sách hợp lệ | Chèn một khối dữ liệu lịch sử vào luồng hiện tại | Replay/reconnect/snapshot bị xử lý sai | Ingestion | Event cũ, có thể trùng, sai cửa sổ thời gian | Tuổi event ↑, ID từng xuất hiện | Phát lại trade từ 6 giờ trước |
+| `FT05_late_out_of_order` | Late / Out-of-order – Muộn/sai thứ tự | Event đến quá muộn hoặc sai thứ tự vượt dung sai xử lý | Delay/đảo thứ tự phân phối nhưng giữ event-time gốc | Backpressure, network delay, scheduling | Streaming / Transformation | Kết quả window sai hoặc bỏ event muộn | Ingest delay p95 ↑, late/drop count ↑ | Trì hoãn 20% event vượt watermark |
+| `FT06_clock_skew` | Clock Skew – Lệch đồng hồ | Timestamp ghi nhận không khớp thời gian thực | Cộng/trừ offset hoặc tạo clock drift vào ingest-time | Đồng hồ host/NTP/logic timestamp sai | Host / Ingestion | Độ trễ đo sai, sai metric thời gian | Negative-delay ratio ↑, dịch chuyển đồng loạt latency | Trừ 2 giây khỏi `ingest_time` |
+| `FT07_schema_drift` | Schema Drift – Đổi cấu trúc | Payload/contract thay đổi không tương thích | Đổi/xóa trường, đổi cấu trúc payload | Thay đổi API/schema không tương thích | Source / Integration | Bản ghi bị từ chối, parser lỗi | Contract violation ↑ | Đổi `price` thành `last_price` |
+| `FT08_type_precision` | Type / Precision – Sai kiểu/độ chính xác | Phép cast/rounding làm thay đổi cách biểu diễn hoặc giá trị số | Ép kiểu hoặc làm tròn trong xử lý | Parser/cast trong transformation | Cleaning / Transformation | Sai kết quả số học, đối soát chênh | Sai khác raw–processed, vi phạm precision | Làm tròn giá xuống 2 chữ số |
+| `FT09_value_anomaly` | Value Anomaly – Sai giá trị/đơn vị | Giá trị nghiệp vụ bị sửa sai ngoài quy tắc hợp lệ | Nhân giá, sai đơn vị hoặc chèn ngoại lai | Lỗi quy đổi / logic sửa giá | Ingestion / Transformation | Sai dữ liệu tài chính, cảnh báo sai | Distribution shift, outlier, cross-source gap có thể ↑ | Nhân giá BTC × 1000 |
+| `FT10_cross_source_mismatch` | Cross-source Mismatch – Sai đối chiếu | Cơ chế ánh xạ/căn chỉnh hai nguồn bị sai | Thay symbol-pair mapping hoặc logic time alignment | Mapping/validation logic lỗi | Integration / Cross-source Validation | Kết luận đối chiếu sai, false alarm | Cross-source return gap ↑ | Ghép BTC với ETH khi so sánh |
+| `FT11_pipeline_failure` | Pipeline Failure – Job lỗi | Job/DAG xử lý thất bại làm pipeline gián đoạn | Làm job thất bại trực tiếp tại runtime | Spark/Airflow task, lỗi cấu hình, tài nguyên | Processing / Infrastructure | Downstream trễ, thiếu dữ liệu | Job failure, run error, freshness downstream ↓ | Làm một job Spark thất bại trong test |
+| `FT12_null_spike` | Null Spike – Null tăng đột biến | Tỷ lệ giá trị null ở trường quan trọng tăng bất thường | Thay giá trị hợp lệ thành null, vẫn giữ tên trường | Parser/transformation tạo mất giá trị | Ingestion / Cleaning / Transformation | Mất completeness, record bị reject/tổng hợp thiếu | Null ratio ↑; contract violation ↑ nếu non-null bắt buộc | Gán `price = null` cho 25% event |
 
-| Mã | Tên | Trụ cột (metric catalog) | Giai đoạn (Foidl) | Đã gặp thật? |
-|---|---|---|---|---|
-| `FT01_stale_feed` | Nguồn ngừng cập nhật | freshness | ingestion | Chưa |
-| `FT02_volume_loss` | Mất một phần dữ liệu | volume | ingestion | Chưa |
-| `FT03_duplicate_events` | Bản ghi trùng lặp | volume | ingestion / cleaning | **Có**: Coinbase, 02:57:01 |
-| `FT04_history_replay` | Sàn phát lại lịch sử giữa phiên | freshness | ingestion | **Có**: Coinbase, trade cũ tới 19,7 giờ |
-| `FT05_late_out_of_order` | Dữ liệu đến muộn quá watermark, sai thứ tự | freshness | ingestion / transformation | Một phần |
-| `FT06_clock_skew` | Lệch đồng hồ máy thu | freshness | infrastructure | **Có**: +1,8 s, 32 461 độ trễ âm |
-| `FT07_schema_drift` | Thay đổi cấu trúc bản ghi | schema | ingestion / integration | Chưa |
-| `FT08_type_precision` | Sai kiểu, mất độ chính xác số | schema / distribution | cleaning / transformation | Chưa (đã phòng bằng contract) |
-| `FT09_value_anomaly` | Giá trị bất thường, sai đơn vị | distribution | cleaning | Chưa |
-| `FT10_cross_source_mismatch` | Lệch giữa các nguồn, ánh xạ mã sai | cross_source | integration | Chưa |
-| `FT11_pipeline_failure` | Job/DAG lỗi, lan xuống hạ nguồn | pipeline_health | infrastructure / processing | Chưa (chờ Airflow) |
+**Lưu ý:** Các tín hiệu trên là dấu hiệu kỳ vọng về mặt thiết kế, không mặc định là metric đã được triển khai hoặc là ngưỡng phát hiện chuẩn.
 
-Có 11 loại. Ba loại FT01, FT02, FT11 là lỗi "kinh điển" của pipeline. Các loại còn lại đặc thù
-cho dữ liệu tài chính nhiều nguồn, và phần lớn đã thấy ngay trong một giờ thu đầu tiên.
+## 4. Định nghĩa chi tiết từng loại lỗi
 
-## Chi tiết từng loại
+### FT01 – Stale Feed
+- **Phạm vi:** Một nguồn, subscription hoặc symbol có dữ liệu kỳ vọng liên tục nhưng ngừng cập nhật.
+- **Cơ chế tiêm:** Chặn toàn bộ event mới trên phạm vi được chọn, ví dụ 300 giây.
+- **Nguyên nhân/vị trí:** Điểm dừng producer, subscription hoặc cổng thu dữ liệu. Root cause của scenario phải ghi đúng điểm được tiêm, không quy cho sàn khi chỉ dừng recorder của FinObs.
+- **Hậu quả/tín hiệu:** Dữ liệu cũ đi; thời gian từ trade gần nhất tăng, count trên nguồn/symbol giảm về 0.
+- **Ranh giới:** FT02 làm rơi một phần, FT01 làm dừng luồng trong phạm vi xác định; thị trường đóng cửa hoặc symbol không có trade tự nhiên là đối chứng, không tự động là sự cố.
 
-### FT01_stale_feed: Nguồn ngừng cập nhật
-- **Hiện tượng:** một nguồn hoặc một mã không còn trade mới. Kết nối có thể vẫn "sống"
-  (WebSocket không đóng) nên recorder không báo lỗi.
-- **Nguyên nhân gốc điển hình:** sàn bảo trì, subscription bị huỷ âm thầm, bị rate-limit
-  (VCI giới hạn khoảng 180 request/phút), tiến trình recorder bị treo.
-- **Tín hiệu:** `last_live_trade_age_seconds` tăng, còn `trade_count_1m` giảm về 0.
-- **Cách tiêm:** cắt toàn bộ bản ghi của một nguồn hoặc mã trong một khoảng thời gian.
-- **Không phải lỗi:** HOSE đóng cửa (ngoài 9:00–11:30, 13:00–14:45 giờ VN), hoặc mã thanh khoản
-  thấp không có giao dịch. Phải có kịch bản đối chứng cho các trường hợp này.
+### FT02 – Volume Loss
+- **Phạm vi:** Dữ liệu vẫn tới nhưng bị mất một phần trên đường đi hoặc khi ghi.
+- **Cơ chế tiêm:** Xóa p% event, rơi một partition, bỏ một nhóm message có nhãn xác định.
+- **Nguyên nhân/vị trí:** Consumer/buffer/Kafka/điểm ghi; định nghĩa root cause theo nơi chủ động loại bỏ dữ liệu.
+- **Hậu quả/tín hiệu:** Thiếu dữ liệu, trade count và tổng giao dịch giảm; đối soát với nguồn chuẩn hoặc ID có thể cho thấy khoảng trống. **ID gap chỉ có ý nghĩa nếu ID/sequence đảm bảo quy tắc liên tục tương ứng.**
+- **Ranh giới:** Không chẩn đoán mất dữ liệu chỉ vì lượng giao dịch thấp tự nhiên hoặc hai nguồn có volume khác nhau.
 
-### FT02_volume_loss: Mất một phần dữ liệu
-- **Hiện tượng:** vẫn có dữ liệu nhưng ít hơn thực tế. Ví dụ: mất một số mã, rơi một tỷ lệ
-  message, một partition giờ không được ghi.
-- **Nguyên nhân gốc:** lỗi subscribe, buffer đầy, consumer Kafka lag rồi bị retention xoá,
-  ghi file thất bại.
-- **Tín hiệu:** `trade_count_1m` giảm so với baseline cùng khung giờ. Đối soát với nguồn khác
-  hoặc với sequence id cho thấy có khoảng trống.
-- **Cách tiêm:** xoá ngẫu nhiên p% bản ghi, hoặc xoá toàn bộ một mã.
+### FT03 – Duplicate Events
+- **Phạm vi:** Cùng event logic bị ghi lại nhiều lần (khóa định danh theo quy tắc mỗi nguồn).
+- **Cơ chế tiêm:** Nhân bản k% event, giữ nguyên ID/khóa dedup thích hợp.
+- **Nguyên nhân/vị trí:** Retry thiếu idempotency hoặc logic dedup bị lỗi.
+- **Hậu quả/tín hiệu:** Raw count tăng; số event duy nhất không tăng; aggregate có thể bị thổi phồng nếu không dedup.
+- **Ranh giới:** FT04 là phát lại dữ liệu lịch sử; hai loại có thể sinh cùng tín hiệu duplicate nhưng chọn nhãn theo thao tác tiêm.
 
-### FT03_duplicate_events: Bản ghi trùng lặp
-- **Hiện tượng:** cùng một `event_id` xuất hiện nhiều lần.
-- **Đã gặp:** Coinbase gửi trùng 7 trade BTC lúc 02:57:01, khi tải dồn và message bị giới hạn
-  100 trade.
-- **Nguyên nhân gốc:** sàn gửi lại khi dồn tải, reconnect rồi subscribe lại, producer retry mà
-  không idempotent.
-- **Tín hiệu:** số bản ghi lớn hơn số `event_id` khác nhau. `trade_count_1m` (đã khử trùng) không đổi,
-  nhưng tổng khối lượng tầng sau bị thổi phồng nếu quên khử trùng.
-- **Cách tiêm:** nhân bản k% bản ghi trong một khoảng thời gian.
+### FT04 – History Replay
+- **Phạm vi:** Một khối dữ liệu có event-time cũ bị đưa lại vào luồng hiện tại ngoài quy trình replay cho phép.
+- **Cơ chế tiêm:** Chèn lại bản ghi từ nhiều giờ trước, có thể giữ ID/event-time gốc.
+- **Nguyên nhân/vị trí:** Replay/snapshot xử lý sai hoặc không nhận diện rõ dữ liệu lịch sử.
+- **Hậu quả/tín hiệu:** Tuổi event lớn bất thường, có thể duplicate, làm méo window.
+- **Ranh giới:** Replay recovery có kiểm soát và dedup đúng không tự động là sự cố; FT05 là trễ vận chuyển event hiện hành, không chủ động phát lại kho lịch sử.
 
-### FT04_history_replay: Sàn phát lại lịch sử giữa phiên
-- **Hiện tượng:** giữa phiên, không có reconnect, sàn đột ngột gửi một loạt trade cũ.
-- **Đã gặp:** Coinbase gửi lại trade cũ tới 19,7 giờ dưới dạng message `update`, không có cờ snapshot.
-- **Khác FT05 ở chỗ:** dữ liệu không chậm do mạng mà là lịch sử bị phát lại có chủ đích.
-  Trade đó thường đã có từ trước, nên lỗi này hay đi kèm FT03.
-- **Tín hiệu:** phân phối `ingest_time - event_time` có đuôi dài hàng giờ, và có nhiều `event_id` đã thấy.
-- **Cách tiêm:** chèn lại một khối bản ghi cũ với `ingest_time` hiện tại.
+### FT05 – Late / Out-of-order
+- **Phạm vi:** Sự kiện tới chậm/sai thứ tự tới mức vượt watermark hoặc làm kết quả theo event-time sai.
+- **Cơ chế tiêm:** Đổi lịch phát hoặc trì hoãn một tập event; **không sửa timestamp gốc**.
+- **Nguyên nhân/vị trí:** Delay/backpressure trong mạng hoặc streaming, watermark quá sát.
+- **Hậu quả/tín hiệu:** Event late tăng, tổng hợp cửa sổ thiếu/sai; ingest-delay percentile có thể tăng.
+- **Ranh giới:** Out-of-order trong dung sai bình thường không tự động là lỗi; FT06 làm sai thời gian được ghi chứ không thay đổi thời điểm đến thật.
 
-### FT05_late_out_of_order: Đến muộn quá watermark, sai thứ tự
-- **Hiện tượng:** bản ghi tới sau khi cửa sổ event-time đã đóng, hoặc thứ tự `event_time`
-  khác thứ tự nhận.
-- **Nguyên nhân gốc:** độ trễ mạng, backpressure, watermark đặt quá sát. Gợi ý watermark từ
-  Sprint 1: Binance 0–200 ms, Coinbase 500 ms, vnstock khoảng 10 s.
-- **Tín hiệu:** số bản ghi bị loại vì muộn tăng, và `ingest_delay_p95_ms` tăng.
-- **Cách tiêm:** cộng thêm độ trễ ngẫu nhiên vào thời điểm phát lại của một phần bản ghi.
+### FT06 – Clock Skew
+- **Phạm vi:** `ingest_time` sai vì đồng hồ hoặc quy tắc ghi thời gian lệch.
+- **Cơ chế tiêm:** Dịch timestamp bằng offset hoặc drift có kiểm soát, không giả vờ rằng event bị chậm thật.
+- **Nguyên nhân/vị trí:** Đồng hồ/NTP của host/collector hoặc timestamp assignment.
+- **Hậu quả/tín hiệu:** Latency âm, percentile lệch đồng loạt và số đo freshness không đáng tin.
+- **Ranh giới:** Latency âm chỉ là triệu chứng, chưa đủ chứng minh Clock Skew nếu chưa kiểm tra time semantics và đồng hồ nguồn.
 
-### FT06_clock_skew: Lệch đồng hồ máy thu
-- **Hiện tượng:** `ingest_time` sai lệch so với giờ thật, khiến độ trễ đo được sai. Lệch âm
-  thì xuất hiện độ trễ âm.
-- **Đã gặp:** máy thu lệch +1,8 s lúc đầu. Sau khi chỉnh vẫn trôi 26 ms/giờ, tới +626 ms sau
-  10 giờ. Kết quả là 32 461 trade Binance có độ trễ âm.
-- **Nguyên nhân gốc:** WSL/Windows không đồng bộ NTP, máy ngủ rồi thức dậy.
-- **Tín hiệu:** độ trễ âm (với Binance là bất khả về vật lý), độ trễ của *mọi* mã cùng dịch
-  một lượng như nhau, và `clock_check` báo vượt 250 ms.
-- **Cách tiêm:** cộng một offset cố định hoặc trôi dần vào `ingest_time`.
+### FT07 – Schema Drift
+- **Phạm vi:** Dữ liệu nguồn đổi trường hoặc cấu trúc không tương thích với contract.
+- **Cơ chế tiêm:** Rename/drop field, đổi object shape, thay đổi kiểu ở ranh giới payload contract.
+- **Nguyên nhân/vị trí:** API/producer thay schema nhưng parser/contract chưa tương thích.
+- **Hậu quả/tín hiệu:** Contract validation fail, bản ghi bị từ chối, parsing lỗi.
+- **Ranh giới:** Thêm trường tùy chọn được contract cho phép không phải lỗi; FT08 là cast/precision sai khi vẫn dùng giao diện dữ liệu cũ.
 
-### FT07_schema_drift: Thay đổi cấu trúc bản ghi
-- **Hiện tượng:** trường bị đổi tên, thêm, bỏ, hoặc đổi kiểu JSON. Ví dụ: `trade_id` của
-  Coinbase đổi từ chuỗi sang số.
-- **Nguyên nhân gốc:** sàn đổi API (thường có hoặc không có thông báo), recorder bị nâng cấp
-  mà không tăng `SCHEMA_VERSION`.
-- **Tín hiệu:** `contract_violation_rate_1m` tăng đột ngột, chỉ ở một nguồn.
-- **Cách tiêm:** đổi tên, xoá hoặc đổi kiểu một trường payload từ một thời điểm trở đi.
+### FT08 – Type / Precision
+- **Phạm vi:** Giá/khối lượng bị sai do chuyển đổi kiểu hoặc giảm precision trong processing.
+- **Cơ chế tiêm:** Cast, làm tròn số, cắt chữ số có nghĩa, thay decimal bởi kiểu thấp hơn độ chính xác yêu cầu.
+- **Nguyên nhân/vị trí:** Parser/Spark transformation/cleaning.
+- **Hậu quả/tín hiệu:** Giá trị giữa raw và tầng sau lệch vượt tolerance; tổng tiền và phép đối soát sai.
+- **Ranh giới:** FT09 là sửa sai giá trị nghiệp vụ hoặc đơn vị có chủ đích; rounding hợp lệ trong tolerance thì không phải sự cố.
 
-### FT08_type_precision: Sai kiểu, mất độ chính xác số
-- **Hiện tượng:** giá hoặc khối lượng bị parse thành float rồi làm tròn, hoặc số chữ số thập
-  phân đổi (Binance luôn là 8 chữ số).
-- **Nguyên nhân gốc:** tầng sau đọc chuỗi thập phân thành `double`, hoặc cast sai trong Spark/dbt.
-  Theo Foidl đây là nhóm nguyên nhân phổ biến nhất.
-- **Tín hiệu:** vi phạm contract (sai số chữ số thập phân). Đối soát tổng tiền giữa tầng raw
-  và tầng sau lệch nhỏ nhưng khác 0.
-- **Cách tiêm:** làm tròn giá về float32/float64, hoặc đổi số chữ số thập phân.
+### FT09 – Value Anomaly
+- **Phạm vi:** Giá trị nghiệp vụ bị sửa hoặc chuyển đơn vị sai dù tên trường/kiểu có thể hợp lệ.
+- **Cơ chế tiêm:** Nhân giá ×1000, chèn giá/khối lượng sai, thay quy đổi đơn vị.
+- **Nguyên nhân/vị trí:** Logic sửa giá, chuẩn hóa sai hoặc payload bị cố ý làm sai.
+- **Hậu quả/tín hiệu:** Outlier, price distribution shift, một nguồn lệch nguồn khác.
+- **Ranh giới:** Biến động giá mạnh tự nhiên không đủ chứng minh lỗi; nếu cơ chế sửa giá gây cross-source gap, nhãn chính vẫn là FT09, không phải FT10.
 
-### FT09_value_anomaly: Giá trị bất thường, sai đơn vị
-- **Hiện tượng:** giá bằng 0, giá nhảy vọt, khối lượng âm hoặc khổng lồ, giá VN30 sai đơn vị
-  (nghìn đồng so với đồng, lệch 1 000 lần).
-- **Nguyên nhân gốc:** lỗi phía nguồn, đổi đơn vị không báo trước, nhập nhầm ("fat finger").
-- **Tín hiệu:** `price_p50_5m` hoặc `trade_size_p95_5m` lệch xa baseline. Chênh với nguồn khác (FT10).
-- **Không phải lỗi:** biến động thị trường thật. Ví dụ: đỉnh tải 02:57:01 xảy ra ở cả hai sàn
-  cùng lúc là sự kiện thị trường. Khi một sự kiện thấy ở nhiều nguồn cùng lúc, đó là dấu hiệu
-  của thị trường chứ không phải lỗi.
-- **Cách tiêm:** nhân giá một mã với hệ số, hoặc chèn vài trade giá ngoại lai.
+### FT10 – Cross-source Mismatch
+- **Phạm vi:** Logic đối chiếu giữa hai nguồn sai vì mapping, time alignment hoặc chuyển đổi chuẩn so sánh.
+- **Cơ chế tiêm:** Sửa bảng symbol-pair, ghép sai hai sản phẩm hoặc dịch thời gian căn chỉnh trong comparator.
+- **Nguyên nhân/vị trí:** Cross-source mapping/validation component (C1).
+- **Hậu quả/tín hiệu:** Sai khác không có ý nghĩa hoặc false positive tăng, return gap bất thường.
+- **Ranh giới:** Chênh lệch thị trường thật, chênh khác quote currency hay đặc thù sàn không tự động là lỗi; sai giá trị một nguồn do tiêm thuộc FT09.
 
-### FT10_cross_source_mismatch: Lệch giữa các nguồn, ánh xạ mã sai
-- **Hiện tượng:** cùng một tài sản nhưng hai nguồn cho giá hoặc biến động khác nhau quá ngưỡng,
-  hoặc so nhầm hai cặp khác nhau (`BTC-USDT` và `BTC-USD` là hai cặp riêng).
-- **Nguyên nhân gốc:** bảng ánh xạ mã sai, một nguồn bị lỗi FT01/FT09 mà không bị phát hiện riêng.
-- **Tín hiệu:** `cross_source_return_gap_5m` vượt ngưỡng.
-- **Cách tiêm:** đổi ánh xạ mã, hoặc dịch giá của một nguồn.
-- Liên quan bài toán truth finding của Li et al. (2012).
+### FT11 – Pipeline Failure
+- **Phạm vi:** Job hoặc task xử lý thất bại trực tiếp tại runtime, tác động downstream.
+- **Cơ chế tiêm:** Mô phỏng job fail hoặc tạo cấu hình kiểm thử khiến một job không thể hoàn thành; chỉ thực hiện trong môi trường test được cho phép.
+- **Nguyên nhân/vị trí:** Spark job/Airflow task/runtime/resource.
+- **Hậu quả/tín hiệu:** Job status failed, run log lỗi, downstream stale hoặc thiếu partition.
+- **Ranh giới:** Nếu chủ động đổi schema FT07 rồi job crash theo sau, nhãn chính là FT07 (lỗi đầu vào được tiêm), không phải FT11.
 
-### FT11_pipeline_failure: Job/DAG lỗi, lan xuống hạ nguồn
-- **Hiện tượng:** một task Spark/Airflow/dbt thất bại, chạy lại hoặc chạy chậm. Bảng hạ nguồn
-  cũ đi hoặc thiếu partition. Đây là loại lỗi cần **lineage** (Marquez) để lần ngược ra gốc.
-- **Nguyên nhân gốc:** hết tài nguyên, lỗi code, phụ thuộc upstream không sẵn sàng.
-- **Tín hiệu:** `recorder_error_count_5m`, trạng thái run trong Marquez, cảnh báo Spark từ
-  Prometheus, và freshness của bảng hạ nguồn.
-- **Cách tiêm:** làm job thất bại (kill container, cấu hình sai) ở một node của đồ thị lineage.
+### FT12 – Null Spike
+- **Phạm vi:** Tỷ lệ `null` ở một field quan trọng tăng vượt mức kỳ vọng, trong khi tên trường và cấu trúc payload vẫn giữ nguyên.
+- **Cơ chế tiêm:** Chọn có kiểm soát một tỷ lệ bản ghi đang có giá trị hợp lệ và gán thành `null`; ví dụ `price` của 25% event trong 300 giây. Tỷ lệ 25% chỉ là ví dụ giả lập.
+- **Nguyên nhân/vị trí:** Điểm xử lý dữ liệu được tiêm tại Ingestion/Cleaning/Transformation; Ground Truth phải xác định chính xác asset và layer thực hiện gán null.
+- **Hậu quả/tín hiệu:** Completeness giảm, contract invalid tăng nếu trường non-null, aggregate thiếu hoặc reject record. Ví dụ metric có thể sử dụng: `price_null_ratio_1m` hoặc ratio theo field; metric `contract_violation_rate_1m` chỉ phản ánh lỗi nếu contract coi null là vi phạm và metric đo được.
+- **Ranh giới:** `price` vẫn có mặt nhưng giá trị null → FT12; trường `price` biến mất/đổi tên → FT07; chuyển kiểu sai khiến giá trị mất sau cast → FT08 nếu đó là cơ chế được tiêm. Field optional được cho phép null không tự động tạo sự cố.
+- **Điều kiện kiểm thử:** Phải xác nhận field mục tiêu tồn tại, dữ liệu gốc không null, điểm đo nhìn thấy giá trị hoặc bản ghi bị từ chối, và ghi số bản ghi thực sự bị can thiệp vào runtime injection evidence sau khi thực thi; Ground Truth chỉ mô tả phạm vi và tỷ lệ dự kiến trước thực thi.
+- **Đặc trưng phân loại:** Null Spike đại diện trực tiếp cho sự suy giảm tính đầy đủ (completeness) mà không đòi hỏi thay đổi cấu trúc payload.
 
-## Quy tắc khi thêm loại mới
+## 5. Phân biệt các loại lỗi chồng lấn
 
-1. Chỉ thêm loại mới khi không gộp được vào loại có sẵn. Mã lấy số kế tiếp, không dùng lại số cũ.
-2. Cập nhật đồng thời bảng ở trên, mục chi tiết và `enum` trong
-   [`scenarios/scenario.schema.json`](scenarios/scenario.schema.json).
-   Lệnh `make validate-scenarios` sẽ báo lỗi nếu hai nơi này không khớp.
+| Cặp lỗi | Chọn lỗi chính như thế nào? |
+|---|---|
+| FT01 / FT02 | Dừng toàn bộ feed trong phạm vi kiểm thử → FT01; vẫn có luồng nhưng mất một phần → FT02. |
+| FT03 / FT04 | Nhân bản event → FT03; phát lại một đoạn lịch sử → FT04, dù có thể phát sinh duplicate. |
+| FT04 / FT05 | Replay event cũ có chủ đích → FT04; delay event mới trong đường truyền → FT05. |
+| FT05 / FT06 | Thay đổi thời điểm phân phối → FT05; sửa timestamp/clock → FT06. |
+| FT07 / FT08 | Thay đổi contract/payload shape → FT07; cast/precision sai trong xử lý → FT08. |
+| FT07 / FT12 | Bỏ/rename trường → FT07; giữ trường nhưng gán null → FT12. |
+| FT08 / FT09 | Mất precision do cast → FT08; làm sai giá trị nghiệp vụ/đơn vị → FT09. |
+| FT09 / FT10 | Sửa giá một nguồn gây cross-source gap → FT09; sửa mapping/alignment trực tiếp → FT10. |
+| FT07 / FT11 | Tiêm schema lỗi khiến job crash → FT07; trực tiếp làm job fail → FT11. |

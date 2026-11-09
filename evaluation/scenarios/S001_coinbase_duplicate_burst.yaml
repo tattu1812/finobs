@@ -1,16 +1,17 @@
-# Mô phỏng lại hiện tượng thật Sprint 1: Coinbase gửi trùng trade khi dồn tải.
+# Mô phỏng nhân bản trade Coinbase; hiện tượng trùng đã được quan sát ở Sprint 1 nhưng chưa xác minh nguyên nhân thực tế.
 scenario_version: 1
 id: S001_coinbase_duplicate_burst
-title: Coinbase gửi trùng 5% trade BTC-USD và ETH-USD trong 2 phút
+title: Mô phỏng trùng 5% trade BTC-USD và ETH-USD ở đầu vào Coinbase trong 2 phút
 fault_type: FT03_duplicate_events
 severity: medium
 description: >
-  Nhân bản 5% trade của BTC-USD và ETH-USD trên Coinbase trong 2 phút, giữ nguyên
-  event_id. Trong lần thu thật, hiện tượng này xảy ra lúc 02:57:01 (7 trade BTC lặp
-  lại). Window được chọn từ 03:00 để không lẫn với lần trùng thật đó. Pipeline đúng
-  phải khử trùng theo event_id: tổng khối lượng ở tầng gold không được đổi.
+  Mô phỏng việc phát lại 5% trade của BTC-USD và ETH-USD ở đầu vào Coinbase
+  trong 2 phút, giữ nguyên event_id. Hiện tượng trùng event_id từng được quan
+  sát lúc 02:57:01 (7 trade BTC lặp lại), nhưng kịch bản không khẳng định
+  nguyên nhân thực tế của hiện tượng đó. Window bắt đầu lúc 03:00 để không
+  lẫn với lần trùng được ghi nhận. Pipeline phải khử trùng theo event_id:
+  tổng khối lượng ở tầng gold không được thay đổi do các bản sao được tiêm.
 tags: [observed_in_sprint1, coinbase, dedup]
-
 input:
   mode: replay
   dataset: data/raw/coinbase/2026-10-27
@@ -20,7 +21,6 @@ input:
     start: "2026-10-27T03:00:00.000Z"
     end: "2026-10-27T03:30:00.000Z"
   seed: 1
-
 injection:
   injector: duplicate_records
   target:
@@ -34,7 +34,6 @@ injection:
     fraction: 0.05             # 5% bản ghi được gửi thêm một lần
     keep_event_id: true
     max_delay_ms: 50           # bản sao tới sau bản gốc tối đa 50 ms
-
 ground_truth:
   is_incident: true
   fault_type: FT03_duplicate_events
@@ -42,10 +41,12 @@ ground_truth:
   end_offset_s: 720
   root_cause:
     asset: "finobs:raw.coinbase_trades"
-    component: platform/ingest/coinbase_ws.py (dữ liệu từ sàn)
+    component: điểm tiêm duplicate_records trên luồng đầu vào Coinbase
     explanation: >
-      Sàn gửi lại trade đã gửi. Recorder ghi nguyên văn nên tầng raw có bản ghi trùng
-      event_id. Lỗi phát sinh ở nguồn, không phải ở pipeline.
+      Benchmark chủ động nhân bản trade giữ cùng event_id tại target source.
+      Raw ghi nhận bản sao và có thể tạo duplicate ở tầng bronze. Đây là
+      nguyên nhân được xác định trong scenario giả lập, không phải kết luận
+      về nguyên nhân thật tại sàn Coinbase hoặc recorder.
   affected_assets:
     - "finobs:raw.coinbase_trades"
     - "finobs:bronze.trades"
@@ -59,7 +60,6 @@ ground_truth:
     - metric: trade_count_1m
       group: { source: coinbase }
       note: trade_count_1m đã khử trùng theo event_id nên không được tăng
-
 evaluation:
   detect_within_s: 120
   diagnose_within_s: 600

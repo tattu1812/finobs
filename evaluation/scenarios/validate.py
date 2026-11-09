@@ -88,7 +88,15 @@ def check_file(path: Path, validator: Draft202012Validator) -> list[str]:
         f"{'/'.join(map(str, e.absolute_path)) or '<gốc>'}: {e.message}"
         for e in sorted(validator.iter_errors(doc), key=lambda e: list(map(str, e.absolute_path)))
     ]
-    # Kiểm tra liên trường chỉ có nghĩa khi cấu trúc đã đúng.
+    # Kiểm tra ngày thực sau khi schema đã xác nhận kiểu và định dạng.
+    if errors:
+        return errors
+    for field in ("start", "end"):
+        value = doc["input"]["window"][field]
+        try:
+            parse_utc(value)
+        except ValueError as exc:
+            errors.append(f"input/window/{field}: timestamp '{value}' không hợp lệ: {exc}")
     return errors or semantic_checks(doc, path)
 
 
