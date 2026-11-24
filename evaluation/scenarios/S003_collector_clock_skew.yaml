@@ -1,16 +1,16 @@
-# Mô phỏng lại hiện tượng thật Sprint 1: đồng hồ máy thu lệch, sinh ra độ trễ âm.
+# Mô phỏng lệch đồng hồ collector qua timestamp; hiện tượng độ trễ âm từng được quan sát ở Sprint 1.
 scenario_version: 1
 id: S003_collector_clock_skew
-title: Đồng hồ máy thu chậm 500 ms, làm Binance và Coinbase có độ trễ âm
+title: Mô phỏng đồng hồ collector chậm 500 ms trên hai nguồn
 fault_type: FT06_clock_skew
 severity: medium
 description: >
-  Trừ 500 ms vào ingest_time của mọi bản ghi, cả hai nguồn, trong 10 phút. Với Binance
-  (độ trễ thật p50 khoảng 7 ms) hầu hết bản ghi sẽ có độ trễ âm, một điều bất khả về
-  vật lý. Điểm phân biệt với lỗi mạng là độ trễ của MỌI mã và MỌI nguồn cùng dịch một
-  lượng như nhau. Vì vậy gốc phải là máy thu (host), không phải sàn.
+  Trừ 500 ms vào ingest_time của mọi bản ghi, cả hai nguồn, trong 10 phút.
+  Với Binance (độ trễ thật p50 từng được đo khoảng 7 ms), nhiều bản ghi có
+  thể cho độ trễ âm. Điểm phân biệt với lỗi mạng là nhiều mã và nhiều nguồn
+  cùng dịch độ trễ một lượng tương tự. Scenario mô phỏng lỗi thời gian tại
+  collector, không xác nhận nguyên nhân thực tế của các độ trễ âm từng thấy.
 tags: [observed_in_sprint1, clock, multi_source]
-
 input:
   mode: replay
   dataset: data/raw
@@ -30,7 +30,6 @@ injection:
   params:
     offset_ms: -500
     drift_ms_per_hour: 0
-
 ground_truth:
   is_incident: true
   fault_type: FT06_clock_skew
@@ -38,10 +37,12 @@ ground_truth:
   end_offset_s: 1200
   root_cause:
     asset: "finobs:host.collector"
-    component: đồng hồ hệ thống máy thu (WSL/Windows time sync)
+    component: điểm tiêm shift_ingest_time mô phỏng đồng hồ collector
     explanation: >
-      Đồng hồ máy thu chậm 500 ms. Mọi ingest_time đều bị ghi sớm hơn thực tế, nên độ
-      trễ của tất cả nguồn cùng giảm 500 ms. Cả hai sàn đều không có lỗi.
+      Benchmark dịch ingest_time sớm 500 ms nhằm mô phỏng đồng hồ collector
+      chậm 500 ms. Độ trễ đo được ở các nguồn bị dịch chuyển; nguyên nhân
+      của scenario là thao tác trên thời gian tại collector, không phải
+      khẳng định lỗi đồng hồ thật hay lỗi từ hai sàn.
   affected_assets:
     - "finobs:raw.binance_trades"
     - "finobs:raw.coinbase_trades"
@@ -50,21 +51,20 @@ ground_truth:
       group: { source: binance }
       direction: shift
       catalog_status: in_catalog
-      note: giảm khoảng 500 ms, xuống giá trị âm
+      note: giảm khoảng 500 ms, có thể xuống giá trị âm tùy dữ liệu nền
     - metric: ingest_delay_p95_ms
       group: { source: coinbase }
       direction: shift
       catalog_status: in_catalog
-      note: giảm khoảng 500 ms; p99 thật khoảng 272 ms nên phần lớn độ trễ cũng thành âm
+      note: giảm khoảng 500 ms; p99 từng được ghi nhận khoảng 272 ms, giá trị sau dịch tùy dữ liệu nền
     - metric: negative_delay_ratio_1m
       group: { source: binance }
       direction: up
       catalog_status: proposed
-      note: tỷ lệ bản ghi có ingest_time < event_time
+      note: tỷ lệ bản ghi có ingest_time nhỏ hơn event_time
   must_not_alert:
     - metric: trade_count_1m
       note: số lượng trade không đổi; báo volume ở đây là false positive
-
 evaluation:
   detect_within_s: 120
   diagnose_within_s: 600
