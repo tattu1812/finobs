@@ -1,0 +1,34 @@
+# Kịch bản ĐỐI CHỨNG: không có lỗi. Detector nào báo ở đây là false positive.
+scenario_version: 1
+id: S100_control_market_burst
+title: "Đối chứng: đỉnh tải thật lúc 02:57:01 ở cả hai sàn"
+fault_type: FT09_value_anomaly    # loại lỗi mà detector dễ báo nhầm nhất ở đây
+severity: low
+description: >
+  Phát lại nguyên văn đoạn có đỉnh tải thật lúc 02:57:01 (gấp 43 lần trung bình của
+  Binance). Đỉnh xảy ra cùng giây ở Binance và Coinbase, nên đây là sự kiện thị trường,
+  không phải lỗi dữ liệu. Lưu ý: chính giây đó có 7 trade BTC bị Coinbase gửi trùng
+  (lỗi thật, FT03). Kịch bản này chỉ chấm các tín hiệu volume/distribution, không chấm
+  tín hiệu trùng lặp.
+tags: [negative_control, observed_in_sprint1, multi_source]
+
+input:
+  mode: replay
+  dataset: data/raw
+  sources: [binance, coinbase]
+  window:
+    start: "2026-10-27T02:50:00.000Z"
+    end: "2026-10-27T03:05:00.000Z"
+
+injection: null
+
+ground_truth:
+  is_incident: false
+  must_not_alert:
+    - metric: trade_count_1m
+      note: số trade tăng vọt nhưng đồng thời ở cả hai nguồn
+    - metric: trade_size_p95_5m
+    - metric: cross_source_return_gap_5m
+
+evaluation:
+  metrics: [false_positive_count]

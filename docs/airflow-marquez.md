@@ -18,6 +18,7 @@ Hai ứng dụng sử dụng database PostgreSQL riêng biệt.
 Tạo file `.env` từ `.env.example` nếu chưa có và thiết lập các biến môi trường, bao gồm:
 
 - `AIRFLOW_DB_PASSWORD`
+- `AIRFLOW_ADMIN_PASSWORD` (mật khẩu tài khoản `admin` của Web UI)
 - `MARQUEZ_DB_PASSWORD`
 
 Không commit file `.env` chứa mật khẩu thật.
@@ -42,19 +43,10 @@ docker compose --env-file .env -f infra/docker-compose.yml ps
 
 ## 4. Khởi tạo Airflow
 
-Container `airflow-init` tự chạy migration khi `make up`, và webserver/scheduler chỉ khởi động sau khi bước này thành công. Lệnh dưới chỉ cần khi muốn chạy migration thủ công:
-
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml run --rm --entrypoint airflow airflow-init db migrate
-```
-
-Tạo tài khoản quản trị:
-
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml run --rm --entrypoint airflow airflow-init users create --username admin --firstname FinObs --lastname Admin --role Admin --email admin@finobs.local
-```
-
-Nhập mật khẩu khi được yêu cầu.
+Image Airflow là `finobs-airflow:local` (build từ `infra/airflow/Dockerfile`: thêm `pyiceberg` và mã
+`platform/batch`). Container `airflow-init` tự chạy migration và **tự tạo tài khoản `admin`** với mật khẩu
+`AIRFLOW_ADMIN_PASSWORD` (qua các biến `_AIRFLOW_DB_MIGRATE`, `_AIRFLOW_WWW_USER_*` của image chính thức).
+Webserver/scheduler chỉ khởi động sau khi bước này thành công. Không cần thao tác tay.
 
 Truy cập Airflow Web UI:
 
@@ -120,14 +112,33 @@ curl -i http://localhost:5000/api/v1/namespaces/finobs/jobs/test_openlineage
 
 Kết quả kiểm thử: HTTP `200 OK`, job `test_openlineage` có trạng thái `COMPLETED`.
 
-## 7. Phạm vi hiện tại
+## 7. DAG `binance_official_daily` (Sprint 2)
 
-- Airflow Webserver và Scheduler hoạt động.
+Mỗi ngày 03:30 UTC nạp file trades chính thức của ngày hôm trước từ Binance Public Data vào
+`iceberg.bronze.binance_official_trades` (mã nguồn: `platform/batch/binance_official.py`).
+
+- Một task cho mỗi mã Binance trong `config/symbols.json`, chạy lần lượt (`max_active_tasks=1`).
+- Tải zip + `.CHECKSUM`, kiểm SHA-256; **sai checksum thì task FAILED, không ghi gì**.
+- Đọc CSV theo khối 16 MB (BTCUSDT một ngày khoảng 4,8 triệu trade) và ghi trong một transaction Iceberg;
+  chạy lại cùng ngày thay đúng partition `(file_date, symbol)`, không sinh bản trùng.
+- Commit Iceberg bị xung đột (task khác vừa commit) thì tự thử lại tối đa 5 lần.
+- Param `simulate_corruption=true` khi trigger thủ công: cố ý làm hỏng file để thấy nhánh lỗi.
+
+```bash
+make load-official DATE=2026-11-24     # nạp tay một ngày (chạy trong container scheduler)
+make official-check                    # Trino: số trade, dãy ID, số file theo ngày và mã
+```
+
+Kết quả chạy thật ngày 2026-11-24: 10/10 task thành công, 9.220.592 trade, dãy trade ID liền mạch ở cả 10 mã.
+
+## 8. Phạm vi hiện tại
+
+- Airflow Webserver và Scheduler hoạt động, DAG `binance_official_daily` chạy thật.
 - Marquez API tiếp nhận và lưu được sự kiện OpenLineage.
 - Chưa tích hợp Airflow tự động phát sự kiện OpenLineage.
 - Chưa triển khai giao diện Marquez Web UI; hiện kiểm thử qua API.
 
-## 8. Lưu ý
+## 9. Lưu ý
 
 Không sử dụng `docker compose down -v` nếu muốn giữ dữ liệu PostgreSQL và các dịch vụ khác.
 

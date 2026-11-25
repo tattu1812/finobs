@@ -157,5 +157,104 @@ class ScenarioValidationTest(unittest.TestCase):
         self.assertIn("2026-02-30T03:00:00.000Z", result.stdout)
 
 
+V1_DIR = ROOT / "tests" / "fixtures" / "scenarios_v1"
+
+
+def _set(path: str, value):
+    def mutate(doc):
+        *parents, leaf = path.split(".")
+        node = doc
+        for key in parents:
+            node = node[key]
+        node[leaf] = value
+    return mutate
+
+
+def _drop(path: str):
+    def mutate(doc):
+        *parents, leaf = path.split(".")
+        node = doc
+        for key in parents:
+            node = node[key]
+        node.pop(leaf, None)
+    return mutate
+
+
+# 16 ca BREAKING trong SPRINT2_REVIEW_HANDOFF.md mục 4: version 1 chấp nhận, version 2 từ chối.
+# (tên, kịch bản gốc, phép sửa)
+BREAKING = [
+    ("1 replay không có dataset", "S002", _drop("input.dataset")),
+    ("2 dataset rỗng", "S002", _set("input.dataset", "")),
+    ("3 input.symbols rỗng", "S002", _set("input.symbols", [])),
+    ("4 input.symbols có chuỗi rỗng", "S002", _set("input.symbols", ["BTCUSDT", ""])),
+    ("5 target.symbols rỗng", "S002", _set("injection.target.symbols", [])),
+    ("6 target.symbols có chuỗi rỗng", "S002", _set("injection.target.symbols", [""])),
+    ("7 target.symbols trùng", "S002", _set("injection.target.symbols", ["ETHUSDT", "ETHUSDT"])),
+    ("8 tags có chuỗi rỗng", "S002", _set("tags", [""])),
+    ("9 affected_assets rỗng", "S002", _set("ground_truth.affected_assets", [])),
+    ("10 expected_signals rỗng", "S002", _set("ground_truth.expected_signals", [])),
+    ("11 root_cause.component rỗng", "S002", _set("ground_truth.root_cause.component", "")),
+    ("12 must_not_alert metric sai pattern", "S002",
+     _set("ground_truth.must_not_alert", [{"metric": "Bad-Metric"}])),
+    ("13 đối chứng có fault_type", "S100", _set("ground_truth.fault_type", "FT09_value_anomaly")),
+    ("14 đối chứng có start_offset_s", "S100", _set("ground_truth.start_offset_s", 0)),
+    ("15 đối chứng có end_offset_s", "S100", _set("ground_truth.end_offset_s", 60)),
+    ("16 đối chứng có affected_assets", "S100",
+     _set("ground_truth.affected_assets", ["finobs:raw.binance.trade"])),
+]
+
+
+class VersionPolicyTest(unittest.TestCase):
+    """Quyết định D01 = C: version 1 đóng băng vẫn hợp lệ, version 2 chặt hơn và có FT12."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.validators = validate.load_validators()
+
+        def load(folder: Path, prefix: str):
+            path = next(folder.glob(f"{prefix}_*.yaml"))
+            return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        cls.v1 = {key: load(V1_DIR, key) for key in ("S002", "S100")}
+        cls.v2 = {key: load(HERE, key) for key in ("S002", "S100")}
+
+    def check(self, doc):
+        with tempfile.TemporaryDirectory(prefix="finobs-validation-") as directory:
+            path = Path(directory) / (doc["id"] + ".yaml")
+            path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+            return validate.check_file(path, self.validators)
+
+    def test_versions_and_bases(self):
+        self.assertEqual(sorted(self.validators), [1, 2])
+        self.assertEqual(validate.LATEST_VERSION, 2)
+        for key in ("S002", "S100"):
+            self.assertEqual(self.v1[key]["scenario_version"], 1)
+            self.assertEqual(self.check(self.v1[key]), [], f"v1 {key}")
+            self.assertEqual(self.v2[key]["scenario_version"], 2)
+            self.assertEqual(self.check(self.v2[key]), [], f"v2 {key}")
+
+    def test_sixteen_breaking_cases(self):
+        self.assertEqual(len(BREAKING), 16)
+        for name, base, mutate in BREAKING:
+            with self.subTest(case=name):
+                old, new = copy.deepcopy(self.v1[base]), copy.deepcopy(self.v2[base])
+                mutate(old)
+                mutate(new)
+                self.assertEqual(self.check(old), [], f"version 1 phải chấp nhận: {name}")
+                self.assertTrue(self.check(new), f"version 2 phải từ chối: {name}")
+
+    def test_ft12_only_in_version_2(self):
+        doc = copy.deepcopy(self.v1["S002"])
+        doc["fault_type"] = doc["ground_truth"]["fault_type"] = "FT12_null_spike"
+        self.assertTrue(any("fault_type" in e for e in self.check(doc)))
+
+    def test_unsupported_version(self):
+        doc = copy.deepcopy(self.v2["S002"])
+        doc["scenario_version"] = 3
+        errors = self.check(doc)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("không được hỗ trợ", errors[0])
+
+
 if __name__ == "__main__":
     unittest.main()

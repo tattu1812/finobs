@@ -2,7 +2,7 @@
 
 Task 1–5 đã được chuẩn bị trên nền Sprint 1: taxonomy mở rộng FT01–FT12, schema và Ground Truth rõ hơn, bốn scenario được rà soát, validator và hướng dẫn được bổ sung. Lần kiểm tra hiện tại đạt 4/4 scenario, 8/8 fixture sai và 7/7 unit test. **Schema mới vẫn ghi `scenario_version: 1` nhưng từ chối một số dữ liệu v1 cũ**; tài liệu này đề nghị nhóm trưởng chọn chính sách tương thích trước khi merge.
 
-**Quyết định cần chốt:** D01 chọn A/B/C; D02 chọn version hỗ trợ FT12; D03 chọn có/không migration guide; D04 chọn có/không cross-team review; D05 phê duyệt hoặc yêu cầu sửa sau khi xử lý. Tất cả đều PENDING (xem mục 7).
+**Quyết định cần chốt:** D01 chọn A/B/C; D02 chọn version hỗ trợ FT12; D03 chọn có/không migration guide; D04 chọn có/không cross-team review; D05 phê duyệt hoặc yêu cầu sửa sau khi xử lý. **Đã chốt ngày 25/11/2026** theo đề xuất kỹ thuật (xem mục 7); phần thực hiện ghi ở mục 10.
 
 | Nội dung | Trạng thái | Cần nhóm trưởng quyết định? |
 |---|---|---|
@@ -114,11 +114,11 @@ Không có Git merge conflict được quan sát trong worktree chuẩn bị. R1
 
 | ID | Câu hỏi cần quyết định | Các lựa chọn | Trạng thái |
 |---|---|---|---|
-| D01 | Chọn chính sách schema compatibility nào? | A/B/C | PENDING |
-| D02 | FT12 được hỗ trợ trong version nào? | V1/V2 | PENDING |
-| D03 | Có cần migration guide không? | YES/NO | PENDING |
-| D04 | Có cần cross-team review với consumer schema không? | YES/NO | PENDING |
-| D05 | Có thể merge PR sau khi giải quyết các vấn đề trên không? | APPROVE/REQUEST CHANGES | PENDING |
+| D01 | Chọn chính sách schema compatibility nào? | A/B/C | **C** – phát hành scenario v2, giữ v1 đóng băng |
+| D02 | FT12 được hỗ trợ trong version nào? | V1/V2 | **V2** – v1 vẫn chỉ FT01–FT11 |
+| D03 | Có cần migration guide không? | YES/NO | **YES** – [MIGRATION_v1_to_v2.md](scenarios/MIGRATION_v1_to_v2.md) |
+| D04 | Có cần cross-team review với consumer schema không? | YES/NO | **YES** – asset đổi sang tên thật, khớp lineage của AI ([quy ước](../docs/conventions/lineage-naming.md)) |
+| D05 | Có thể merge PR sau khi giải quyết các vấn đề trên không? | APPROVE/REQUEST CHANGES | **APPROVE** sau khi CI xanh và có người duyệt PR |
 
 ## 8 – Kết quả kiểm thử
 
@@ -155,7 +155,18 @@ git diff --check
 4. Yêu cầu chỉnh sửa khi cần; chạy lại validation sau khi thống nhất.
 5. Chỉ merge khi nhóm trưởng phê duyệt.
 
-HANDOFF_STATUS: READY_FOR_REVIEW
-SCHEMA_COMPATIBILITY: REVIEW_REQUIRED
-MERGE_APPROVAL: PENDING
+## 10 – Thực hiện sau quyết định (25/11/2026)
+
+| Việc | Kết quả |
+|---|---|
+| Tách hợp đồng | `scenario.v1.schema.json` (đóng băng từ `6ae2034`), `scenario.schema.json` thành version 2 |
+| Validator | Chọn schema theo `scenario_version`; phiên bản lạ bị từ chối với thông báo rõ |
+| Kịch bản hiện có | S001–S003, S100 chuyển lên `scenario_version: 2`, asset đổi sang tên thật |
+| Regression v1 | 4 kịch bản v1 gốc ở `tests/fixtures/scenarios_v1/` vẫn hợp lệ |
+| 16 ca breaking | Mỗi ca có test: v1 chấp nhận, v2 từ chối (`VersionPolicyTest`) |
+| Kiểm thử | 4/4 v2, 4/4 v1, 8/8 fixture lỗi bị bắt, 11/11 unit test |
+
+HANDOFF_STATUS: DECIDED
+SCHEMA_COMPATIBILITY: RESOLVED_OPTION_C
+MERGE_APPROVAL: VIA_PULL_REQUEST
 TASK6_INCLUDED: NO

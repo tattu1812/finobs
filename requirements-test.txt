@@ -1,0 +1,4 @@
+# Thư viện chỉ dùng để chạy unit test trên máy và trong CI (make test).
+pyarrow>=17.0
+prometheus-client>=0.21
+pyyaml>=6.0

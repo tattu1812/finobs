@@ -2,7 +2,7 @@
 In đồ thị lineage của một dataset, đọc qua tool get_lineage (tức là qua Marquez).
 
     python -m agent.tools.lineage_graph                                   # Marquez giả
-    python -m agent.tools.lineage_graph --asset finobs:raw.binance_trades --direction downstream
+    python -m agent.tools.lineage_graph --asset finobs:raw.binance.trade --direction downstream
     python -m agent.tools.lineage_graph --marquez-url http://localhost:5000   # Marquez thật
     python -m agent.tools.lineage_graph --format mermaid > lineage.mmd
     python -m agent.tools.lineage_graph --alerts                         # đánh dấu node đang có alert
