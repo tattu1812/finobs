@@ -4,3 +4,4 @@ jsonschema==4.26.0
 confluent-kafka==2.6.1
 prometheus-client==0.21.1
 psycopg[binary]==3.2.3
+pyyaml==6.0.2

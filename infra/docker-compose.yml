@@ -1,9 +1,17 @@
 # FinObs - toàn bộ hạ tầng phát triển. Chạy từ gốc repo: make up
 #
-# Luồng dữ liệu S2:
-#   producer (WebSocket) -> kafka raw.<source>.trade -> bronze-stream (Spark) -> iceberg bronze.trades_raw
-#   airflow binance_official_daily -> iceberg bronze.binance_official_trades
-#   producer -> volume raw_data -> metrics-collector -> metrics-postgres
+# Luồng dữ liệu (S3):
+#   producer (Binance, Coinbase, Kraken WS; vnstock poll) -> kafka raw.<source>.trade
+#     -> bronze-stream (Spark) -> iceberg bronze.trades_raw
+#     -> silver-gold (Spark) -> silver.trades -> gold.ohlcv_1m, gold.cross_exchange_spread
+#   airflow binance_official_daily -> bronze.binance_official_trades; iceberg_maintenance hằng ngày
+#   producer -> volume raw_data -> metrics-collector (+ Trino) -> metrics-postgres
+#   mọi job phát OpenLineage -> marquez; Prometheus -> Alertmanager (-> Telegram)
+#
+# Profile (PL-7):
+#   (không profile)  phần lõi thu + xử lý + metric + alert: luôn chạy      make up-core
+#   ops              Airflow, Marquez, Grafana, pipeline-exporter          make up (= lõi + ops)
+#   timesync         đồng bộ giờ máy ảo Docker Desktop bằng NTP (PL-6)     make timesync
 #
 # Các service *-init chạy một lần rồi dừng với Exited (0): đó là trạng thái bình thường.
 
@@ -24,6 +32,8 @@ x-airflow-common: &airflow-common
     context: ..
     dockerfile: infra/airflow/Dockerfile
   image: finobs-airflow:local
+  profiles: [ops]
+  mem_limit: 1g
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
@@ -33,6 +43,10 @@ x-airflow-common: &airflow-common
     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ICEBERG_REST_URI: http://iceberg-rest:8181
     S3_ENDPOINT: http://minio:9000
+    TRINO_URL: http://trino:8080
+    MARQUEZ_URL: http://marquez-api:5000
+    # REST API cho pipeline-exporter (trạng thái DAG run).
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
   volumes:
     - ./airflow/dags:/opt/airflow/dags
   networks:
@@ -43,6 +57,8 @@ services:
   marquez-api:
     image: marquezproject/marquez:0.50.0
     container_name: finobs-marquez-api
+    profiles: [ops]
+    mem_limit: 768m
     depends_on:
       marquez-postgres:
         condition: service_healthy
@@ -60,6 +76,8 @@ services:
   marquez-postgres:
     image: postgres:16
     container_name: finobs-marquez-postgres
+    profiles: [ops]
+    mem_limit: 256m
     environment:
       POSTGRES_USER: marquez
       POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD}
@@ -79,6 +97,8 @@ services:
   airflow-postgres:
     image: postgres:16
     container_name: finobs-airflow-postgres
+    profiles: [ops]
+    mem_limit: 256m
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
@@ -131,6 +151,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
     command: scheduler
+    mem_limit: 1536m
     restart: unless-stopped
 
   # ------------------------------------------------------------------ Kafka
@@ -138,6 +159,7 @@ services:
     image: apache/kafka:3.9.1
     hostname: kafka
     container_name: finobs-kafka
+    mem_limit: 768m
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     environment:
@@ -176,7 +198,7 @@ services:
     command:
       - |
         set -e
-        for topic in raw.binance.trade raw.coinbase.trade raw.dlq; do
+        for topic in raw.binance.trade raw.coinbase.trade raw.kraken.trade raw.vnstock.trade raw.dlq; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists \
             --topic "$$topic" --partitions 3 --replication-factor 1 \
             --config retention.ms=604800000
@@ -190,6 +212,7 @@ services:
   minio:
     image: dappros/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: finobs-minio
+    mem_limit: 512m
     command: server /data --console-address ":9001"
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
@@ -243,6 +266,7 @@ services:
   iceberg-rest:
     image: tabulario/iceberg-rest:1.6.0
     container_name: finobs-iceberg-rest
+    mem_limit: 512m
     depends_on:
       minio-init:
         condition: service_completed_successfully
@@ -258,7 +282,9 @@ services:
       CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
       CATALOG_S3_ENDPOINT: http://minio:9000
       CATALOG_S3_PATH__STYLE__ACCESS: "true"
-      CATALOG_URI: jdbc:sqlite:/var/lib/iceberg/catalog.db
+      # WAL + busy_timeout: S3 có nhiều job commit đồng thời (bronze, silver-gold MERGE, bảo trì);
+      # SQLite mặc định báo SQLITE_BUSY ngay -> commit lỗi 500. Có busy_timeout thì commit sau chờ tối đa 30 s.
+      CATALOG_URI: jdbc:sqlite:/var/lib/iceberg/catalog.db?journal_mode=WAL&busy_timeout=30000
     volumes:
       - iceberg_catalog_data:/var/lib/iceberg
     restart: unless-stopped
@@ -268,6 +294,7 @@ services:
   trino:
     image: trinodb/trino:477
     container_name: finobs-trino
+    mem_limit: 1536m
     depends_on:
       - iceberg-rest
     ports:
@@ -285,6 +312,7 @@ services:
   spark-master:
     <<: *spark-image
     container_name: finobs-spark-master
+    mem_limit: 512m
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
@@ -303,6 +331,7 @@ services:
   spark-worker:
     <<: *spark-image
     container_name: finobs-spark-worker
+    mem_limit: 2560m
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.worker.Worker
@@ -336,7 +365,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       KAFKA_BOOTSTRAP: kafka:29092
-      TRIGGER_SECONDS: ${BRONZE_TRIGGER_SECONDS:-15}
+      TRIGGER_SECONDS: ${BRONZE_TRIGGER_SECONDS:-60}
+      MARQUEZ_URL: http://marquez-api:5000
+      METRICS_PORT: "9108"
     command: >
       /opt/spark/bin/spark-submit
       --master spark://spark-master:7077
@@ -347,6 +378,38 @@ services:
       /opt/finobs/platform/streaming/bronze_trades.py
     volumes:
       - spark_checkpoints:/checkpoints
+    mem_limit: 1g
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # Silver + gold (platform/streaming/silver_gold.py): bronze -> silver.trades -> gold.ohlcv_1m,
+  # gold.cross_exchange_spread. Tính lại từ đầu bronze: make reprocess.
+  silver-gold:
+    <<: *spark-image
+    container_name: finobs-silver-gold
+    hostname: silver-gold
+    depends_on:
+      bronze-stream:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TRIGGER_SECONDS: ${SILVER_TRIGGER_SECONDS:-60}
+      MARQUEZ_URL: http://marquez-api:5000
+      METRICS_PORT: "9108"
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --conf spark.driver.host=silver-gold
+      --conf spark.driver.memory=768m
+      --conf spark.executor.memory=1g
+      --conf spark.cores.max=1
+      --conf spark.sql.shuffle.partitions=4
+      /opt/finobs/platform/streaming/silver_gold.py
+    volumes:
+      - spark_checkpoints:/checkpoints
+    mem_limit: 1536m
     restart: unless-stopped
     networks:
       - finobs-network
@@ -362,10 +425,13 @@ services:
     command: >
       python platform/ingest/produce.py
       --bootstrap kafka:29092
-      --sources ${PRODUCER_SOURCES:-binance,coinbase}
+      --sources ${PRODUCER_SOURCES:-binance,coinbase,kraken,vnstock}
       --symbols config/symbols.json
       --raw-out /data/raw
       --metrics-port 8000
+    environment:
+      MARQUEZ_URL: http://marquez-api:5000
+    mem_limit: 384m
     volumes:
       - raw_data:/data/raw
     # Đủ thời gian để đóng file gzip và flush Kafka khi docker stop.
@@ -383,6 +449,7 @@ services:
   metrics-postgres:
     image: postgres:16
     container_name: finobs-metrics-postgres
+    mem_limit: 256m
     environment:
       POSTGRES_USER: finobs
       POSTGRES_PASSWORD: ${METRICS_DB_PASSWORD:?METRICS_DB_PASSWORD must be set}
@@ -413,7 +480,9 @@ services:
         condition: service_started
     environment:
       FINOBS_METRIC_DSN: postgresql://finobs:${METRICS_DB_PASSWORD}@metrics-postgres:5432/finobs_metrics
+      TRINO_URL: http://trino:8080
     command: python observability/collectors/run_loop.py --raw /data/raw
+    mem_limit: 640m
     volumes:
       - raw_data:/data/raw:ro
     restart: unless-stopped
@@ -423,6 +492,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0
     container_name: finobs-prometheus
+    mem_limit: 512m
     ports:
       - "9090:9090"
     volumes:
@@ -433,9 +503,60 @@ services:
     networks:
       - finobs-network
 
+  # Nhận alert từ Prometheus; có TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID thì gửi vào Telegram (PL-9).
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: finobs-alertmanager
+    entrypoint: ["/bin/sh", "/etc/finobs-alertmanager/entrypoint.sh"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./configs/alertmanager:/etc/finobs-alertmanager:ro
+      - alertmanager_data:/alertmanager
+    mem_limit: 128m
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # Trạng thái DAG run của Airflow cho Prometheus (pipeline health).
+  pipeline-exporter:
+    <<: *app-image
+    container_name: finobs-pipeline-exporter
+    profiles: [ops]
+    depends_on:
+      - airflow-webserver
+    environment:
+      AIRFLOW_URL: http://airflow-webserver:8080
+      AIRFLOW_USER: admin
+      AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    command: python observability/collectors/pipeline_exporter.py --port 8001
+    mem_limit: 128m
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # PL-6: Docker Desktop (Windows/macOS) chạy trong máy ảo có đồng hồ trôi (đo được chậm ~1 s).
+  # Container này có quyền SYS_TIME và chạy ntpd, chỉnh đồng hồ của chính máy ảo Docker.
+  # KHÔNG bật trên máy chủ Linux thật: ở đó đồng hồ host do chrony/systemd-timesyncd quản lý.
+  timesync:
+    image: alpine:3.20
+    container_name: finobs-timesync
+    profiles: [timesync]
+    cap_add: [SYS_TIME]
+    command: ["ntpd", "-d", "-n", "-p", "time.google.com", "-p", "time.cloudflare.com", "-p", "pool.ntp.org"]
+    mem_limit: 32m
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
   grafana:
     image: grafana/grafana:11.6.0
     container_name: finobs-grafana
+    profiles: [ops]
+    mem_limit: 256m
     ports:
       - "3000:3000"
     environment:
@@ -459,6 +580,7 @@ volumes:
   marquez_postgres_data:
   metrics_postgres_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
   raw_data:
   spark_checkpoints:
