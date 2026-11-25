@@ -1,4 +1,45 @@
+# FinObs - toàn bộ hạ tầng phát triển. Chạy từ gốc repo: make up
+#
+# Luồng dữ liệu S2:
+#   producer (WebSocket) -> kafka raw.<source>.trade -> bronze-stream (Spark) -> iceberg bronze.trades_raw
+#   airflow binance_official_daily -> iceberg bronze.binance_official_trades
+#   producer -> volume raw_data -> metrics-collector -> metrics-postgres
+#
+# Các service *-init chạy một lần rồi dừng với Exited (0): đó là trạng thái bình thường.
+
+x-spark-image: &spark-image
+  build:
+    context: ..
+    dockerfile: infra/spark/Dockerfile
+  image: finobs-spark:local
+
+x-app-image: &app-image
+  build:
+    context: ..
+    dockerfile: infra/app/Dockerfile
+  image: finobs-app:local
+
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: infra/airflow/Dockerfile
+  image: finobs-airflow:local
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: utc
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ICEBERG_REST_URI: http://iceberg-rest:8181
+    S3_ENDPOINT: http://minio:9000
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+  networks:
+    - finobs-network
+
 services:
+  # ------------------------------------------------------------------ lineage
   marquez-api:
     image: marquezproject/marquez:0.50.0
     container_name: finobs-marquez-api
@@ -15,6 +56,7 @@ services:
     restart: unless-stopped
     networks:
       - finobs-network
+
   marquez-postgres:
     image: postgres:16
     container_name: finobs-marquez-postgres
@@ -32,6 +74,8 @@ services:
     restart: unless-stopped
     networks:
       - finobs-network
+
+  # ------------------------------------------------------------------ điều phối
   airflow-postgres:
     image: postgres:16
     container_name: finobs-airflow-postgres
@@ -48,58 +92,48 @@ services:
       retries: 5
     networks:
       - finobs-network
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: finobs-airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    # Entrypoint của image Airflow tự migrate DB và tạo tài khoản admin theo các biến _AIRFLOW_*.
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:?AIRFLOW_ADMIN_PASSWORD must be set}
+    command: version
+    restart: "no"
+
   airflow-webserver:
-    image: apache/airflow:2.10.5-python3.11
+    <<: *airflow-common
     container_name: finobs-airflow-webserver
     depends_on:
       airflow-postgres:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     ports:
       - "${AIRFLOW_PORT:-8080}:8080"
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
     command: webserver
     restart: unless-stopped
-    networks:
-      - finobs-network
+
   airflow-scheduler:
-    image: apache/airflow:2.10.5-python3.11
+    <<: *airflow-common
     container_name: finobs-airflow-scheduler
     depends_on:
       airflow-postgres:
         condition: service_healthy
       airflow-init:
         condition: service_completed_successfully
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
     command: scheduler
     restart: unless-stopped
-    networks:
-      - finobs-network
-  airflow-init:
-    image: apache/airflow:2.10.5-python3.11
-    container_name: finobs-airflow-init
-    depends_on:
-      airflow-postgres:
-        condition: service_healthy
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    command: db migrate
-    restart: "no"
-    networks:
-      - finobs-network
+
+  # ------------------------------------------------------------------ Kafka
   kafka:
     image: apache/kafka:3.9.1
     hostname: kafka
@@ -110,7 +144,7 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:29092,PLAINTEXT_HOST://:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${KAFKA_PORT:-9092}
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -118,12 +152,41 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
     volumes:
       - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    restart: unless-stopped
     networks:
       - finobs-network
 
+  # Topic theo đặc tả (Bảng 8): mỗi nguồn một topic, khóa = mã, giữ 7 ngày.
+  kafka-init:
+    image: apache/kafka:3.9.1
+    container_name: finobs-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        for topic in raw.binance.trade raw.coinbase.trade raw.dlq; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists \
+            --topic "$$topic" --partitions 3 --replication-factor 1 \
+            --config retention.ms=604800000
+        done
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --describe
+    restart: "no"
+    networks:
+      - finobs-network
+
+  # ------------------------------------------------------------------ lưu trữ
   minio:
     image: dappros/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: finobs-minio
@@ -136,25 +199,36 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
     networks:
       - finobs-network
 
-  spark-master:
-    image: apache/spark:3.5.3
-    container_name: finobs-spark-master
-    command: >
-      /opt/spark/bin/spark-class
-      org.apache.spark.deploy.master.Master
-      --host spark-master
-      --port 7077
-      --webui-port 8080
-    ports:
-      - "7077:7077"
-      - "${SPARK_UI_PORT:-8082}:8080"
-    volumes:
-      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+  # Tạo bucket kho Iceberg. Image MinIO có sẵn mc (minio/mc không còn trên Docker Hub).
+  minio-init:
+    image: dappros/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: finobs-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set finobs http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing finobs/finobs-warehouse
+        mc ls finobs
+    restart: "no"
     networks:
       - finobs-network
+
   iceberg-init:
     image: alpine:3.20
     container_name: finobs-iceberg-init
@@ -166,13 +240,12 @@ services:
     networks:
       - finobs-network
 
-
   iceberg-rest:
     image: tabulario/iceberg-rest:1.6.0
     container_name: finobs-iceberg-rest
     depends_on:
-      minio:
-        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
       iceberg-init:
         condition: service_completed_successfully
     ports:
@@ -188,6 +261,7 @@ services:
       CATALOG_URI: jdbc:sqlite:/var/lib/iceberg/catalog.db
     volumes:
       - iceberg_catalog_data:/var/lib/iceberg
+    restart: unless-stopped
     networks:
       - finobs-network
 
@@ -203,22 +277,146 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ./configs/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # ------------------------------------------------------------------ Spark
+  spark-master:
+    <<: *spark-image
+    container_name: finobs-spark-master
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+      --host spark-master
+      --port 7077
+      --webui-port 8080
+    ports:
+      - "7077:7077"
+      - "${SPARK_UI_PORT:-8082}:8080"
+    volumes:
+      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+    restart: unless-stopped
     networks:
       - finobs-network
 
   spark-worker:
-    image: apache/spark:3.5.3
+    <<: *spark-image
     container_name: finobs-spark-worker
     command: >
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
-      --cores 1
-      --memory 1G
+      --cores ${SPARK_WORKER_CORES:-2}
+      --memory ${SPARK_WORKER_MEMORY:-2G}
     depends_on:
       - spark-master
     volumes:
       - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # Spark Structured Streaming: Kafka -> iceberg bronze.trades_raw (platform/streaming/bronze_trades.py).
+  # Driver chạy trong container này (client mode); checkpoint nằm trong volume spark_checkpoints.
+  bronze-stream:
+    <<: *spark-image
+    container_name: finobs-bronze-stream
+    hostname: bronze-stream
+    depends_on:
+      spark-master:
+        condition: service_started
+      spark-worker:
+        condition: service_started
+      kafka-init:
+        condition: service_completed_successfully
+      iceberg-rest:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      KAFKA_BOOTSTRAP: kafka:29092
+      TRIGGER_SECONDS: ${BRONZE_TRIGGER_SECONDS:-15}
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --conf spark.driver.host=bronze-stream
+      --conf spark.driver.memory=512m
+      --conf spark.executor.memory=768m
+      --conf spark.cores.max=1
+      /opt/finobs/platform/streaming/bronze_trades.py
+    volumes:
+      - spark_checkpoints:/checkpoints
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # ------------------------------------------------------------------ thu nhận
+  # WebSocket Binance + Coinbase -> kiểm contract -> Kafka (platform/ingest/produce.py).
+  producer:
+    <<: *app-image
+    container_name: finobs-producer
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    command: >
+      python platform/ingest/produce.py
+      --bootstrap kafka:29092
+      --sources ${PRODUCER_SOURCES:-binance,coinbase}
+      --symbols config/symbols.json
+      --raw-out /data/raw
+      --metrics-port 8000
+    volumes:
+      - raw_data:/data/raw
+    # Đủ thời gian để đóng file gzip và flush Kafka khi docker stop.
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics', timeout=3)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # ------------------------------------------------------------------ observability
+  metrics-postgres:
+    image: postgres:16
+    container_name: finobs-metrics-postgres
+    environment:
+      POSTGRES_USER: finobs
+      POSTGRES_PASSWORD: ${METRICS_DB_PASSWORD:?METRICS_DB_PASSWORD must be set}
+      POSTGRES_DB: finobs_metrics
+    ports:
+      - "${METRICS_DB_PORT:-5435}:5432"
+    volumes:
+      # Chạy 001_*.sql, 002_*.sql theo thứ tự tên file ở lần khởi tạo đầu tiên.
+      - ../observability/store:/docker-entrypoint-initdb.d:ro
+      - metrics_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finobs -d finobs_metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
+  # Mỗi phút tính trade_count_1m, ingest_delay_p95_ms, last_live_trade_age_seconds từ file raw.
+  metrics-collector:
+    <<: *app-image
+    container_name: finobs-metrics-collector
+    depends_on:
+      metrics-postgres:
+        condition: service_healthy
+      producer:
+        condition: service_started
+    environment:
+      FINOBS_METRIC_DSN: postgresql://finobs:${METRICS_DB_PASSWORD}@metrics-postgres:5432/finobs_metrics
+    command: python observability/collectors/run_loop.py --raw /data/raw
+    volumes:
+      - raw_data:/data/raw:ro
+    restart: unless-stopped
     networks:
       - finobs-network
 
@@ -231,6 +429,7 @@ services:
       - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./configs/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
+    restart: unless-stopped
     networks:
       - finobs-network
 
@@ -248,6 +447,7 @@ services:
       - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+    restart: unless-stopped
     networks:
       - finobs-network
 
@@ -257,8 +457,12 @@ volumes:
   iceberg_catalog_data:
   airflow_postgres_data:
   marquez_postgres_data:
+  metrics_postgres_data:
   prometheus_data:
   grafana_data:
+  raw_data:
+  spark_checkpoints:
+
 networks:
   finobs-network:
     driver: bridge
