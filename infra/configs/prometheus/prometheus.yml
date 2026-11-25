@@ -22,3 +22,9 @@ scrape_configs:
     static_configs:
       - targets:
           - spark-worker:8081
+
+  # Producer WebSocket -> Kafka: bản ghi, vi phạm contract, reconnect, lệch đồng hồ.
+  - job_name: producer
+    static_configs:
+      - targets:
+          - producer:8000

@@ -1,0 +1,40 @@
+groups:
+  - name: finobs-ingest-alerts
+    rules:
+      - alert: ProducerDown
+        expr: up{job="producer"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: producer
+        annotations:
+          summary: "Producer WebSocket -> Kafka không phản hồi"
+          description: "Prometheus không đọc được metric của producer quá 2 phút."
+
+      - alert: SourceStale
+        expr: time() - finobs_producer_last_ingest_timestamp_seconds > 120
+        for: 1m
+        labels:
+          severity: high
+          service: producer
+        annotations:
+          summary: "Nguồn {{ $labels.source }} không có bản ghi mới"
+          description: "Bản ghi gần nhất của {{ $labels.source }} đã cũ hơn 2 phút."
+
+      - alert: ContractViolations
+        expr: sum by (source) (increase(finobs_producer_records_total{result="invalid"}[5m])) > 0
+        labels:
+          severity: high
+          service: producer
+        annotations:
+          summary: "{{ $labels.source }} gửi bản ghi vi phạm data contract"
+          description: "Có bản ghi vào topic raw.dlq trong 5 phút qua; xem header finobs.errors."
+
+      - alert: ClockSkew
+        expr: abs(finobs_producer_clock_offset_ms) > 250
+        labels:
+          severity: medium
+          service: producer
+        annotations:
+          summary: "Đồng hồ máy producer lệch {{ $value }} ms so với NTP"
+          description: "Lệch quá 250 ms làm số đo độ trễ ingest không còn đúng (phát hiện 1 của Sprint 1)."

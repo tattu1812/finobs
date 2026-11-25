@@ -13,8 +13,8 @@ Hai transport:
   - FakeTransport()          : trả JSON CÙNG ĐỊNH DẠNG, dựng từ agent/tools/fake_world.py,
                                nên client chạy đúng một đường code ở cả hai chế độ.
 
-Quy ước định danh: asset "finobs:raw.binance_trades" <-> Marquez node
-"dataset:finobs:raw.binance_trades"; job "job:finobs:bronze_load".
+Quy ước định danh: asset "finobs:raw.binance.trade" <-> Marquez node
+"dataset:finobs:raw.binance.trade"; job "job:finobs:bronze_trades".
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@
 Thư mục `evaluation/scenarios/` chứa các kịch bản **tiêm lỗi có kiểm soát** và **đối chứng** để đánh giá phát hiện bất thường và chẩn đoán nguyên nhân trong FinObs. Mỗi file `.yaml` mô tả dữ liệu đầu vào, thao tác tiêm lỗi (nếu có), đáp án chuẩn (*Ground Truth*) và tiêu chí đánh giá.
 
 - **Fault Taxonomy:** [`../fault_taxonomy.md`](../fault_taxonomy.md) — định nghĩa FT01–FT12 và nguyên tắc lựa chọn loại lỗi chính.
-- **JSON Schema:** [`scenario.schema.json`](scenario.schema.json) — định dạng và những ràng buộc cấu trúc của scenario.
+- **JSON Schema:** [`scenario.schema.json`](scenario.schema.json) (version 2, hiện hành) và [`scenario.v1.schema.json`](scenario.v1.schema.json) (version 1, đóng băng) — định dạng và ràng buộc cấu trúc; [`MIGRATION_v1_to_v2.md`](MIGRATION_v1_to_v2.md) — cách chuyển.
 - **Ground Truth:** [`ground_truth_conventions.md`](ground_truth_conventions.md) — quy tắc xác lập đáp án, đối chứng, thời gian, metric và AC@k.
 - **Validator:** `validate.py` — kiểm tra schema và các điều kiện liên trường.
 
@@ -15,9 +15,9 @@ Một file **PASS validation** mới chứng minh cấu trúc và một số đi
 
 | Scenario | Vai trò | Fault Type | Cơ chế / phạm vi | Ground Truth chính |
 |---|---|---|---|---|
-| [`S001_coinbase_duplicate_burst.yaml`](S001_coinbase_duplicate_burst.yaml) | Sự cố | `FT03_duplicate_events` | Nhân bản 5% trade Coinbase, giữ event ID, trong 120 giây | `finobs:raw.coinbase_trades` |
-| [`S002_binance_schema_drift.yaml`](S002_binance_schema_drift.yaml) | Sự cố | `FT07_schema_drift` | Đổi trường `p` thành `price` và kiểu trường `t` trên ETHUSDT, trong 900 giây | `finobs:raw.binance_trades` |
-| [`S003_collector_clock_skew.yaml`](S003_collector_clock_skew.yaml) | Sự cố | `FT06_clock_skew` | Dịch `ingest_time` sớm 500 ms trên cả hai nguồn, trong 600 giây | `finobs:host.collector` |
+| [`S001_coinbase_duplicate_burst.yaml`](S001_coinbase_duplicate_burst.yaml) | Sự cố | `FT03_duplicate_events` | Nhân bản 5% trade Coinbase, giữ event ID, trong 120 giây | `finobs:raw.coinbase.trade` |
+| [`S002_binance_schema_drift.yaml`](S002_binance_schema_drift.yaml) | Sự cố | `FT07_schema_drift` | Đổi trường `p` thành `price` và kiểu trường `t` trên ETHUSDT, trong 900 giây | `finobs:raw.binance.trade` |
+| [`S003_collector_clock_skew.yaml`](S003_collector_clock_skew.yaml) | Sự cố | `FT06_clock_skew` | Dịch `ingest_time` sớm 500 ms trên cả hai nguồn, trong 600 giây | `finobs:host.producer` |
 | [`S100_control_market_burst.yaml`](S100_control_market_burst.yaml) | Đối chứng | `FT09_value_anomaly` ở cấp scenario (nhãn kiểm tra báo nhầm) | Phát lại dữ liệu không chủ động tiêm lỗi | `is_incident: false`; không có root cause |
 
 Các kịch bản lỗi mô tả **nguyên nhân được chủ động giả lập**, không khẳng định nguyên nhân thực tế của các hiện tượng từng quan sát. S100 chỉ đánh giá báo nhầm trong phạm vi **volume/distribution** được khai báo; dữ liệu nền có một số trade Coinbase trùng nên không dùng S100 để kết luận false-positive rate cho mọi loại lỗi.
@@ -37,7 +37,7 @@ Các trường bắt buộc **ở cấp cao nhất**: `scenario_version`, `id`, 
 
 ### 3.1. Quy tắc nhận diện
 
-- `scenario_version: 1` là phiên bản cấu trúc đang sử dụng.
+- `scenario_version: 2` là phiên bản hiện hành. Version 1 vẫn được kiểm bằng `scenario.v1.schema.json` (đóng băng); cách chuyển xem [`MIGRATION_v1_to_v2.md`](MIGRATION_v1_to_v2.md).
 - `id` phải khớp **tên file không có phần mở rộng** và tuân theo dạng `S` + ít nhất 3 chữ số + `_` + tên chữ thường/số/dấu gạch dưới, ví dụ `S004_null_spike_demo`.
 - `fault_type` ở cấp scenario phải thuộc đúng 12 mã FT01–FT12 trong taxonomy; trường này cũng có mặt ở **đối chứng** để chỉ loại lỗi được thử nghiệm báo nhầm.
 - Theo quy ước tổ chức bộ mẫu: `S001–S099` dành cho lỗi, `S100–S199` dành cho đối chứng, `S900+` dùng cho fixture cố ý sai. Đây là **quy ước đặt tên**, không phải điều kiện phân loại do schema tự suy ra; số ID có thể được mở rộng khi bộ bench lớn hơn.
@@ -79,7 +79,7 @@ Với `is_incident: false`, không khai báo `fault_type` **bên trong `ground_t
 Ví dụ mô tả cùng cơ chế như S001 và đủ các trường bắt buộc. Nếu lưu để kiểm tra, tên file phải là `S001_coinbase_duplicate_burst.yaml`; sử dụng thư mục riêng để không ghi đè scenario mẫu.
 
 ```yaml
-scenario_version: 1
+scenario_version: 2
 id: S001_coinbase_duplicate_burst
 title: Mô phỏng trùng trade Coinbase
 fault_type: FT03_duplicate_events
@@ -95,7 +95,7 @@ injection:
   injector: duplicate_records
   target:
     layer: source
-    asset: "finobs:raw.coinbase_trades"
+    asset: "finobs:raw.coinbase.trade"
   start_offset_s: 600
   duration_s: 120
 ground_truth:
@@ -104,10 +104,10 @@ ground_truth:
   start_offset_s: 600
   end_offset_s: 720
   root_cause:
-    asset: "finobs:raw.coinbase_trades"
+    asset: "finobs:raw.coinbase.trade"
     component: "điểm tiêm duplicate_records"
     explanation: "Scenario chủ động nhân bản trade trên luồng Coinbase."
-  affected_assets: ["finobs:raw.coinbase_trades"]
+  affected_assets: ["finobs:raw.coinbase.trade"]
   expected_signals:
     - metric: duplicate_ratio_1m
       direction: non_zero

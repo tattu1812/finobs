@@ -5,11 +5,11 @@ Dựng theo kịch bản evaluation/scenarios/S002_binance_schema_drift.yaml và
 xuống hạ nguồn để có việc cho chẩn đoán:
 
   03:05  Binance đổi schema của ETHUSDT (đổi tên "p" -> "price", "t" thành chuỗi)
-  03:06  job bronze_load bắt đầu FAILED vì cast lỗi -> bronze/silver/gold cũ dần
+  03:06  job bronze_trades bắt đầu FAILED vì cast lỗi -> bronze/silver/gold cũ dần
   03:12  Coinbase BTC-USD có đỉnh tải thật (sự kiện thị trường) -> alert gây nhiễu
 
-Đáp án đúng cho một agent: gốc là finobs:raw.binance_trades (nguồn Binance), không
-phải job bronze_load (job chỉ là nơi lỗi lộ ra) và không phải Coinbase.
+Đáp án đúng cho một agent: gốc là finobs:raw.binance.trade (nguồn Binance), không
+phải job bronze_trades (job chỉ là nơi lỗi lộ ra) và không phải Coinbase.
 
 Mọi số đều sinh tất định từ SEED, nên test và demo luôn cho cùng kết quả.
 """
@@ -25,7 +25,7 @@ SEED = 2
 START = datetime(2026, 10, 27, 3, 0, tzinfo=timezone.utc)
 MINUTES = 20
 DRIFT_AT = START + timedelta(minutes=5)       # Binance đổi schema
-FAIL_AT = START + timedelta(minutes=6)        # bronze_load bắt đầu lỗi
+FAIL_AT = START + timedelta(minutes=6)        # bronze_trades bắt đầu lỗi
 BURST_AT = START + timedelta(minutes=12)      # đỉnh tải thật của Coinbase
 
 
@@ -40,12 +40,12 @@ def parse_iso(text: str) -> datetime:
 # ---------------------------------------------------------------- topology lineage
 # job -> (inputs, outputs). Tên dataset khớp asset trong evaluation/scenarios/*.yaml.
 JOBS: dict[str, tuple[list[str], list[str]]] = {
-    "ingest_binance": ([], ["raw.binance_trades"]),
-    "ingest_coinbase": ([], ["raw.coinbase_trades"]),
-    "bronze_load": (["raw.binance_trades", "raw.coinbase_trades"], ["bronze.trades"]),
-    "silver_dedup": (["bronze.trades"], ["silver.trades_dedup"]),
-    "gold_ohlcv": (["silver.trades_dedup"], ["gold.ohlcv_1m"]),
-    "gold_cross_source": (["silver.trades_dedup"], ["gold.cross_source_spread"]),
+    "ingest_binance": ([], ["raw.binance.trade"]),
+    "ingest_coinbase": ([], ["raw.coinbase.trade"]),
+    "bronze_trades": (["raw.binance.trade", "raw.coinbase.trade"], ["bronze.trades_raw"]),
+    "silver_dedup": (["bronze.trades_raw"], ["silver.trades"]),
+    "gold_ohlcv": (["silver.trades"], ["gold.ohlcv_1m"]),
+    "gold_cross_source": (["silver.trades"], ["gold.cross_exchange_spread"]),
 }
 
 
@@ -103,8 +103,8 @@ def build() -> FakeWorld:
         w.violations[src] = checks
 
     # Độ tươi của bảng (metric đề xuất): raw luôn tươi, từ bronze trở xuống cũ dần khi job lỗi.
-    for asset in ("raw.binance_trades", "raw.coinbase_trades", "bronze.trades",
-                  "silver.trades_dedup", "gold.ohlcv_1m", "gold.cross_source_spread"):
+    for asset in ("raw.binance.trade", "raw.coinbase.trade", "bronze.trades_raw",
+                  "silver.trades", "gold.ohlcv_1m", "gold.cross_exchange_spread"):
         vals = []
         for ts in _minutes():
             if asset.startswith("raw.") or ts < FAIL_AT:
@@ -117,7 +117,7 @@ def build() -> FakeWorld:
     for job in JOBS:
         runs = []
         for i, ts in enumerate(_minutes()):
-            failed = job == "bronze_load" and ts >= FAIL_AT
+            failed = job == "bronze_trades" and ts >= FAIL_AT
             skipped = job in ("silver_dedup", "gold_ohlcv", "gold_cross_source") and ts >= FAIL_AT
             runs.append({
                 "run_id": f"{job}-{ts:%H%M}",
@@ -141,14 +141,14 @@ def build() -> FakeWorld:
             "baseline": baseline, "status": "open", "message": message,
         })
 
-    alert("A001", "contract_violation_rate_1m", {"source": "binance"}, "raw.binance_trades",
+    alert("A001", "contract_violation_rate_1m", {"source": "binance"}, "raw.binance.trade",
           DRIFT_AT, "high", 0.0, "Tỷ lệ bản ghi Binance vi phạm contract tăng đột ngột từ 0")
-    alert("A002", "table_freshness_seconds", {"asset": f"{NAMESPACE}:bronze.trades"}, "bronze.trades",
-          FAIL_AT + timedelta(minutes=2), "medium", 60.0, "bronze.trades không được cập nhật quá 3 phút")
+    alert("A002", "table_freshness_seconds", {"asset": f"{NAMESPACE}:bronze.trades_raw"}, "bronze.trades_raw",
+          FAIL_AT + timedelta(minutes=2), "medium", 60.0, "bronze.trades_raw không được cập nhật quá 3 phút")
     alert("A003", "table_freshness_seconds", {"asset": f"{NAMESPACE}:gold.ohlcv_1m"}, "gold.ohlcv_1m",
           FAIL_AT + timedelta(minutes=3), "medium", 60.0, "gold.ohlcv_1m không được cập nhật quá 4 phút")
     alert("A004", "trade_count_1m", {"source": "coinbase", "symbol_canonical": "BTC-USD"},
-          "raw.coinbase_trades", BURST_AT, "low", 310.0, "Số trade Coinbase BTC-USD tăng vọt so với trung bình")
+          "raw.coinbase.trade", BURST_AT, "low", 310.0, "Số trade Coinbase BTC-USD tăng vọt so với trung bình")
     return w
 
 

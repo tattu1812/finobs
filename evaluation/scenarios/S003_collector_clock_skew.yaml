@@ -1,5 +1,5 @@
 # Mô phỏng lệch đồng hồ collector qua timestamp; hiện tượng độ trễ âm từng được quan sát ở Sprint 1.
-scenario_version: 1
+scenario_version: 2
 id: S003_collector_clock_skew
 title: Mô phỏng đồng hồ collector chậm 500 ms trên hai nguồn
 fault_type: FT06_clock_skew
@@ -24,7 +24,7 @@ injection:
   injector: shift_ingest_time
   target:
     layer: host
-    asset: "finobs:host.collector"
+    asset: "finobs:host.producer"
   start_offset_s: 600          # 03:10:00
   duration_s: 600
   params:
@@ -36,7 +36,7 @@ ground_truth:
   start_offset_s: 600
   end_offset_s: 1200
   root_cause:
-    asset: "finobs:host.collector"
+    asset: "finobs:host.producer"
     component: điểm tiêm shift_ingest_time mô phỏng đồng hồ collector
     explanation: >
       Benchmark dịch ingest_time sớm 500 ms nhằm mô phỏng đồng hồ collector
@@ -44,8 +44,8 @@ ground_truth:
       của scenario là thao tác trên thời gian tại collector, không phải
       khẳng định lỗi đồng hồ thật hay lỗi từ hai sàn.
   affected_assets:
-    - "finobs:raw.binance_trades"
-    - "finobs:raw.coinbase_trades"
+    - "finobs:raw.binance.trade"
+    - "finobs:raw.coinbase.trade"
   expected_signals:
     - metric: ingest_delay_p95_ms
       group: { source: binance }
