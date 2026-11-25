@@ -7,6 +7,30 @@ on:
     branches: [main]
 
 jobs:
+  # Khóa bronze trong thời gian thu 14 ngày (docs/conventions/bronze-freeze.md):
+  # PR đụng file quyết định nội dung bronze phải có nhãn bronze-change-approved sau review riêng.
+  bronze-freeze:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check frozen bronze files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'bronze-change-approved') }}
+        run: |
+          frozen='^(platform/ingest/(produce|sinks|common|binance_ws|coinbase_ws|kraken_ws|vnstock_poll)\.py|platform/contracts/|platform/streaming/bronze_trades\.py|config/symbols\.json)'
+          changed=$(git diff --name-only "$BASE_SHA"...HEAD | grep -E "$frozen" || true)
+          if [ -z "$changed" ]; then echo "Không đụng file bronze bị khóa."; exit 0; fi
+          echo "PR đổi file bronze bị khóa:"; echo "$changed"
+          if [ "$APPROVED" = "true" ]; then echo "Có nhãn bronze-change-approved: cho qua."; exit 0; fi
+          echo "::error::Cần review riêng và nhãn bronze-change-approved (xem docs/conventions/bronze-freeze.md)"
+          exit 1
+
   lint-and-validate:
     runs-on: ubuntu-latest
 
@@ -34,24 +58,29 @@ jobs:
       - name: Validate evaluation scenarios (v2, v1 cũ, ca lỗi, unit test)
         run: make validate-scenarios PY=python
 
-      - name: Test platform (producer Kafka writer, Binance official loader)
+      - name: Test platform (producer, adapter Kraken, nạp file chính thức, injector)
         run: make test-platform PY=python
 
-      - name: Test agent tools (fake data, Marquez client, metric store)
+      - name: Test agent tools (dữ liệu giả, Marquez, metric store, RCA heuristic)
         run: make test-agent PY=python
 
-      - name: Test observability collectors
+      - name: Test observability (collector, lịch giao dịch, pipeline health)
         run: make test-observability PY=python
 
       - name: Prepare environment
         run: cp .env.example .env
 
-      - name: Validate Docker Compose
-        run: docker compose --env-file .env -f infra/docker-compose.yml config --quiet
+      - name: Validate Docker Compose (mọi profile)
+        run: |
+          docker compose --env-file .env -f infra/docker-compose.yml config --quiet
+          docker compose --env-file .env -f infra/docker-compose.yml --profile ops --profile timesync config --quiet
 
       # Build đủ 3 image tự viết để bắt lỗi Dockerfile (tải jar Maven, cài pyiceberg...).
       - name: Build Docker images
-        run: docker compose --env-file .env -f infra/docker-compose.yml build
+        run: docker compose --env-file .env -f infra/docker-compose.yml --profile ops build
+
+      - name: Test silver/gold on Spark (trong image finobs-spark)
+        run: make test-spark
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
