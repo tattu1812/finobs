@@ -18,6 +18,8 @@ ADD --chmod=644 ${MAVEN}/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION
 
 COPY infra/configs/spark/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
 COPY platform/streaming/ /opt/finobs/platform/streaming/
+COPY platform/lineage.py /opt/finobs/platform/lineage.py
+COPY config/ /opt/finobs/config/
 RUN mkdir -p /checkpoints && chown spark /checkpoints
 
 USER spark
