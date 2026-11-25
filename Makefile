@@ -7,42 +7,59 @@ RAW         ?= data/raw
 MINUTES     ?= 60
 SOURCES     ?= binance,coinbase
 VALIDATE_IN ?= $(if $(wildcard $(RAW)/*/*/*.jsonl.gz),$(RAW),tests/fixtures/raw)
+# Ngày file chính thức Binance cần nạp (mặc định: hôm qua theo UTC)
+DATE        ?= $(shell date -u -d yesterday +%F 2>/dev/null)
 
 # Chỉ tự dựng venv khi dùng venv mặc định (CI truyền PY=python)
 ifeq ($(PY),$(VENV)/bin/python)
 PY_DEP := $(VENV)/.installed
 endif
 
-.PHONY: help check up down stop restart ps logs venv clock-check record analyze validate-contracts validate-scenarios test-agent test-observability lineage
+TRINO = docker exec finobs-trino trino --output-format ALIGNED --execute
+
+.PHONY: help check build up down stop restart ps logs venv clock-check record analyze \
+	validate-contracts validate-scenarios test test-agent test-observability test-platform \
+	lineage bronze-check official-check load-official
 
 help:
 	@echo "FinObs commands:"
 	@echo "  make check   - Validate Docker Compose"
-	@echo "  make up      - Start all services"
-	@echo "  make down    - Stop and remove containers"
+	@echo "  make build   - Build image finobs-app, finobs-spark, finobs-airflow"
+	@echo "  make up      - Build (nếu cần) và khởi chạy toàn bộ dịch vụ"
+	@echo "  make down    - Stop and remove containers (giữ volume)"
 	@echo "  make stop    - Stop services"
 	@echo "  make restart - Restart services"
 	@echo "  make ps      - Show service status"
 	@echo "  make logs    - Follow service logs"
 	@echo ""
-	@echo "Ingest:"
-	@echo "  make venv               - Tạo .venv và cài requirements-ingest.txt"
+	@echo "Pipeline:"
+	@echo "  make bronze-check       - Trino: dữ liệu live mới nhất trên bronze.trades_raw"
+	@echo "  make load-official      - Nạp file chính thức Binance ngày DATE=$(DATE) (trong container Airflow)"
+	@echo "  make official-check     - Trino: số trade và dãy ID của bronze.binance_official_trades"
+	@echo ""
+	@echo "Ingest (chạy trên máy, ra file):"
+	@echo "  make venv               - Tạo .venv và cài requirements-ingest.txt + requirements-test.txt"
 	@echo "  make clock-check        - Đo lệch đồng hồ (dừng nếu > 250 ms)"
 	@echo "  make record             - clock-check rồi thu MINUTES=$(MINUTES) phút từ SOURCES=$(SOURCES)"
 	@echo "  make analyze            - Bảng đo + biểu đồ vào reports/"
 	@echo "  make validate-contracts - Validate VALIDATE_IN với platform/contracts + ca lỗi cố ý"
-	@echo "  make validate-scenarios - Kiểm tra evaluation/scenarios/*.yaml + ca lỗi cố ý"
+	@echo "  make validate-scenarios - Kiểm tra scenario v2, scenario v1 cũ, ca lỗi cố ý + unit test"
 	@echo ""
-	@echo "Agent:"
-	@echo "  make test-agent         - Test 5 tool agent trên dữ liệu giả + client Marquez"
-	@echo "  make test-observability - Test collector trade_count_1m"
+	@echo "Test:"
+	@echo "  make test               - Chạy mọi unit test"
+	@echo "  make test-platform      - Producer (Kafka writer) + bộ nạp file chính thức"
+	@echo "  make test-observability - Collector trade_count, freshness, vòng chạy liên tục"
+	@echo "  make test-agent         - 5 tool agent (dữ liệu giả, Marquez, metric store)"
 	@echo "  make lineage            - In đồ thị lineage (MARQUEZ_URL=http://localhost:5000 để dùng Marquez thật)"
 
 check:
 	$(COMPOSE) config --quiet
 
+build:
+	$(COMPOSE) build
+
 up:
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --build
 
 down:
 	$(COMPOSE) down
@@ -61,9 +78,9 @@ logs:
 
 venv: $(VENV)/.installed
 
-$(VENV)/.installed: requirements-ingest.txt
+$(VENV)/.installed: requirements-ingest.txt requirements-test.txt
 	test -x $(VENV)/bin/python || python3 -m venv $(VENV)
-	$(VENV)/bin/pip install -q -r requirements-ingest.txt
+	$(VENV)/bin/pip install -q -r requirements-ingest.txt -r requirements-test.txt
 	touch $@
 
 clock-check: $(PY_DEP)
@@ -79,11 +96,16 @@ validate-contracts: $(PY_DEP)
 	$(PY) platform/contracts/validate.py --in $(VALIDATE_IN)
 	$(PY) platform/contracts/validate.py --in tests/fixtures/invalid --expect-invalid --show 0
 
+test: test-platform test-observability test-agent
+
+test-platform: $(PY_DEP)
+	$(PY) -m unittest tests.test_producer_sinks tests.test_binance_official -v
+
 test-agent: $(PY_DEP)
-	$(PY) -m unittest tests.test_agent_tools -v
+	$(PY) -m unittest tests.test_agent_tools tests.test_metric_store -v
 
 test-observability: $(PY_DEP)
-	$(PY) -m unittest tests.test_trade_count_collector -v
+	$(PY) -m unittest tests.test_trade_count_collector tests.test_freshness_collector -v
 
 lineage: $(PY_DEP)
 	$(PY) -m agent.tools.lineage_graph --alerts $(if $(MARQUEZ_URL),--marquez-url $(MARQUEZ_URL))
@@ -91,4 +113,20 @@ lineage: $(PY_DEP)
 validate-scenarios: $(PY_DEP)
 	$(if $(PY_DEP),$(VENV)/bin/pip install -q -r requirements-eval.txt)
 	$(PY) evaluation/scenarios/validate.py
+	$(PY) evaluation/scenarios/validate.py --in tests/fixtures/scenarios_v1
 	$(PY) evaluation/scenarios/validate.py --in tests/fixtures/scenarios_invalid --expect-invalid
+	$(PY) -m unittest discover -s evaluation/scenarios -p test_validate.py
+
+bronze-check:
+	$(TRINO) "SELECT source, count(*) AS rows, max(ingest_ts) AS newest_ingest, \
+	  date_diff('second', max(bronze_ts), current_timestamp) AS bronze_age_s \
+	  FROM iceberg.bronze.trades_raw GROUP BY source ORDER BY source"
+
+load-official:
+	docker exec finobs-airflow-scheduler python /opt/finobs/platform/batch/binance_official.py --date $(DATE) \
+	  --symbols /opt/finobs/config/symbols.json
+
+official-check:
+	$(TRINO) "SELECT file_date, symbol, count(*) AS rows, max(trade_id) - min(trade_id) + 1 AS id_span, \
+	  count(DISTINCT checksum) AS files FROM iceberg.bronze.binance_official_trades \
+	  GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC"
