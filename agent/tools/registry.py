@@ -68,9 +68,12 @@ def _window(args: dict) -> tuple:
 
 
 class Toolbox:
-    def __init__(self, world: FakeWorld, marquez: MarquezClient):
+    def __init__(self, world: FakeWorld, marquez: MarquezClient, metric_store=None):
+        """metric_store: agent.tools.metric_store.MetricStore; có thì query_metric đọc metric
+        store thật, không thì đọc FakeWorld."""
         self.world = world
         self.marquez = marquez
+        self.metric_store = metric_store
         self.specs = {name: load_spec(name) for name in TOOL_NAMES}
         self._in = {n: Draft202012Validator(s["input_schema"]) for n, s in self.specs.items()}
         self.handlers = {n: getattr(self, f"_{n}") for n in TOOL_NAMES}
@@ -79,6 +82,15 @@ class Toolbox:
     def fake(cls, marquez_url: str | None = None) -> Toolbox:
         transport = HttpTransport(marquez_url) if marquez_url else FakeTransport()
         return cls(fake_world.build(), MarquezClient(transport))
+
+    @classmethod
+    def with_metric_store(cls, dsn: str, marquez_url: str | None = None) -> Toolbox:
+        """query_metric đọc metric store PostgreSQL thật; các tool khác vẫn như fake()."""
+        from agent.tools.metric_store import MetricStore
+
+        tb = cls.fake(marquez_url)
+        tb.metric_store = MetricStore(dsn)
+        return tb
 
     # ------------------------------------------------------------ cửa vào
     def definitions(self) -> list[dict]:
@@ -117,10 +129,19 @@ class Toolbox:
     # ------------------------------------------------------------ 2. query_metric
     def _query_metric(self, args: dict) -> dict:
         start, end = _window(args)
-        entry = self.world.metrics.get(args["metric"])
+        want = args.get("group", {})
+        if self.metric_store is not None:
+            try:
+                entry = self.metric_store.series(args["metric"], want, start, end)
+            except Exception as exc:  # noqa: BLE001 — DB không tới được: trả lỗi cho agent, không ném
+                raise ToolError("backend_unavailable", f"Metric store lỗi: {exc}") from exc
+            if entry is None:
+                raise ToolError("not_found", f"Metric store không có dữ liệu '{args['metric']}' "
+                                             f"khớp group {want} trong khoảng thời gian này")
+        else:
+            entry = self.world.metrics.get(args["metric"])
         if entry is None:
             raise ToolError("not_found", f"Không có metric '{args['metric']}'. Có: {', '.join(sorted(self.world.metrics))}")
-        want = args.get("group", {})
         series = []
         for group, points in entry["series"]:
             if any(group.get(k) != v for k, v in want.items()):

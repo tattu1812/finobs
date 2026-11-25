@@ -25,7 +25,7 @@ VALID_CALLS = {
     "list_alerts": {"start": W0, "end": W1},
     "query_metric": {"metric": "contract_violation_rate_1m", "start": W0, "end": W1},
     "get_lineage": {"asset": "finobs:gold.ohlcv_1m", "direction": "upstream"},
-    "get_job_runs": {"job": "bronze_load", "start": W0, "end": W1},
+    "get_job_runs": {"job": "bronze_trades", "start": W0, "end": W1},
     "get_contract_violations": {"source": "binance", "start": W0, "end": W1},
 }
 
@@ -115,7 +115,7 @@ class FakeWorldStoryTest(unittest.TestCase):
         res = self.tb.call("list_alerts", {"start": W0, "end": W1})
         self.assertEqual([a["alert_id"] for a in res["alerts"]], ["A001", "A002", "A003", "A004"])
         high = self.tb.call("list_alerts", {"start": W0, "end": W1, "min_severity": "high"})
-        self.assertEqual([a["asset"] for a in high["alerts"]], ["finobs:raw.binance_trades"])
+        self.assertEqual([a["asset"] for a in high["alerts"]], ["finobs:raw.binance.trade"])
 
     def test_alert_values_match_metric(self):
         a001 = self.tb.call("list_alerts", {"start": W0, "end": W1})["alerts"][0]
@@ -131,8 +131,8 @@ class FakeWorldStoryTest(unittest.TestCase):
         c = self.tb.call("get_contract_violations", {"source": "coinbase", "start": W0, "end": W1})
         self.assertEqual((c["invalid"], c["samples"], c["first_violation_at"]), (0, [], None))
 
-    def test_bronze_load_fails_after_drift(self):
-        r = self.tb.call("get_job_runs", {"job": "finobs:bronze_load", "start": W0, "end": W1, "limit": 3})
+    def test_bronze_trades_fails_after_drift(self):
+        r = self.tb.call("get_job_runs", {"job": "finobs:bronze_trades", "start": W0, "end": W1, "limit": 3})
         self.assertEqual(r["first_failure_at"], "2026-10-27T03:06:05.000Z")
         self.assertEqual(len(r["runs"]), 3)
         self.assertEqual(r["state_counts"], {"COMPLETED": 6, "FAILED": 14})
@@ -156,30 +156,30 @@ class LineageTest(unittest.TestCase):
     def test_upstream_of_gold_reaches_both_raw_sources(self):
         res = self.tb.call("get_lineage", {"asset": "finobs:gold.ohlcv_1m"})
         self.assertEqual(res["datasets"],
-                         ["finobs:silver.trades_dedup", "finobs:bronze.trades",
-                          "finobs:raw.binance_trades", "finobs:raw.coinbase_trades"])
+                         ["finobs:silver.trades", "finobs:bronze.trades_raw",
+                          "finobs:raw.binance.trade", "finobs:raw.coinbase.trade"])
         self.assertEqual(res["jobs"][:2], ["finobs:gold_ohlcv", "finobs:silver_dedup"])
-        self.assertNotIn("finobs:gold.cross_source_spread", res["datasets"])  # nhánh anh em, không phải upstream
+        self.assertNotIn("finobs:gold.cross_exchange_spread", res["datasets"])  # nhánh anh em, không phải upstream
         dist = {n["name"]: n["distance"] for n in res["nodes"]}
         self.assertEqual(dist["gold.ohlcv_1m"], 0)
-        self.assertEqual(dist["raw.binance_trades"], -6)
+        self.assertEqual(dist["raw.binance.trade"], -6)
 
     def test_downstream_of_raw_binance_is_blast_radius(self):
-        res = self.tb.call("get_lineage", {"asset": "finobs:raw.binance_trades", "direction": "downstream"})
+        res = self.tb.call("get_lineage", {"asset": "finobs:raw.binance.trade", "direction": "downstream"})
         self.assertIn("finobs:gold.ohlcv_1m", res["datasets"])
-        self.assertIn("finobs:gold.cross_source_spread", res["datasets"])
-        self.assertNotIn("finobs:raw.coinbase_trades", res["datasets"])
+        self.assertIn("finobs:gold.cross_exchange_spread", res["datasets"])
+        self.assertNotIn("finobs:raw.coinbase.trade", res["datasets"])
         self.assertTrue(all(n["distance"] >= 0 for n in res["nodes"]))
 
     def test_depth_limits_walk(self):
         res = self.tb.call("get_lineage", {"asset": "finobs:gold.ohlcv_1m", "depth": 2})
-        self.assertEqual(res["datasets"], ["finobs:silver.trades_dedup"])
+        self.assertEqual(res["datasets"], ["finobs:silver.trades"])
         self.assertEqual(res["jobs"], ["finobs:gold_ohlcv"])
 
     def test_both_directions(self):
-        res = self.tb.call("get_lineage", {"asset": "finobs:bronze.trades", "direction": "both"})
+        res = self.tb.call("get_lineage", {"asset": "finobs:bronze.trades_raw", "direction": "both"})
         dist = {n["name"]: n["distance"] for n in res["nodes"]}
-        self.assertLess(dist["raw.coinbase_trades"], 0)
+        self.assertLess(dist["raw.coinbase.trade"], 0)
         self.assertGreater(dist["gold.ohlcv_1m"], 0)
 
     def test_http_transport_against_local_marquez_stub(self):
@@ -209,7 +209,7 @@ class LineageTest(unittest.TestCase):
         try:
             url = f"http://127.0.0.1:{server.server_port}"
             graph = MarquezClient(HttpTransport(url)).lineage("finobs:gold.ohlcv_1m", depth=5)
-            self.assertIn("dataset:finobs:raw.binance_trades", graph.nodes)
+            self.assertIn("dataset:finobs:raw.binance.trade", graph.nodes)
             self.assertEqual(seen[0], ("/api/v1/lineage", {"nodeId": "dataset:finobs:gold.ohlcv_1m", "depth": "5"}))
 
             via_http = Toolbox.fake(marquez_url=url).call("get_lineage", {"asset": "finobs:gold.ohlcv_1m"})
@@ -226,10 +226,10 @@ class LineageScriptTest(unittest.TestCase):
     def test_tree_and_mermaid_render(self):
         tb = Toolbox.fake()
         res = tb.call("get_lineage", {"asset": "finobs:gold.ohlcv_1m"})
-        tree = render_tree(res, "upstream", {"dataset:finobs:raw.binance_trades": ["A001"]})
+        tree = render_tree(res, "upstream", {"dataset:finobs:raw.binance.trade": ["A001"]})
         self.assertEqual(tree[0], "finobs:gold.ohlcv_1m")
-        self.assertTrue(any("raw.binance_trades" in line and "A001" in line for line in tree))
-        self.assertEqual(sum("raw.coinbase_trades" in line for line in tree), 1)
+        self.assertTrue(any("raw.binance.trade" in line and "A001" in line for line in tree))
+        self.assertEqual(sum("raw.coinbase.trade" in line for line in tree), 1)
         mermaid = render_mermaid(res, {})
         self.assertEqual(mermaid[0], "flowchart LR")
         self.assertEqual(sum("-->" in line for line in mermaid), len(res["edges"]))

@@ -1,12 +1,12 @@
 # Tool cho agent chẩn đoán FinObs
 
-Gồm 5 tool mà agent (LLM) gọi để điều tra một sự cố dữ liệu. Hiện tool chạy trên **dữ liệu giả**,
-riêng lineage có thể đọc từ **Marquez thật**.
+Gồm 5 tool mà agent (LLM) gọi để điều tra một sự cố dữ liệu. Mặc định tool chạy trên **dữ liệu giả**;
+lineage đọc được từ **Marquez thật**, và `query_metric` đọc được từ **metric store thật** (Sprint 2).
 
 ```bash
-make test-agent                                  # 21 test: 5 tool, schema, lỗi, client Marquez
+make test-agent                                  # 5 tool, schema, lỗi, client Marquez, metric store
 make lineage                                     # in đồ thị lineage (Marquez giả) kèm alert
-python -m agent.tools.lineage_graph --asset finobs:raw.binance_trades --direction downstream
+python -m agent.tools.lineage_graph --asset finobs:raw.binance.trade --direction downstream
 python -m agent.tools.lineage_graph --format mermaid     # hoặc dot, json
 ```
 
@@ -17,7 +17,7 @@ Luôn chạy bằng `python -m ...` từ gốc repo, để Python import đượ
 | Tool | Trả lời câu hỏi | Nguồn dữ liệu hiện tại |
 |---|---|---|
 | `list_alerts` | Detector đang báo gì, trong khoảng thời gian nào? | dữ liệu giả |
-| `query_metric` | Metric thay đổi thế nào so với trước, các nguồn khác có thay đổi giống vậy không? | dữ liệu giả |
+| `query_metric` | Metric thay đổi thế nào so với trước, các nguồn khác có thay đổi giống vậy không? | dữ liệu giả hoặc **metric store** |
 | `get_lineage` | Dataset này phụ thuộc vào đâu (upstream) và ảnh hưởng tới đâu (downstream)? | **Marquez** (thật hoặc giả) |
 | `get_job_runs` | Job nằm giữa hai dataset có đang lỗi không, lỗi từ lúc nào? | dữ liệu giả |
 | `get_contract_violations` | Nguồn nào gửi bản ghi sai contract, sai ở trường nào, mã nào? | dữ liệu giả |
@@ -51,12 +51,12 @@ xuống hạ nguồn. Window là 2026-10-27, 03:00–03:20 UTC.
 | Thời điểm | Sự kiện | Thấy qua |
 |---|---|---|
 | 03:05 | Binance đổi schema payload của ETHUSDT | `get_contract_violations`, alert A001 |
-| 03:06 | Job `bronze_load` bắt đầu FAILED vì cast lỗi | `get_job_runs` |
-| 03:08–03:09 | Bảng `bronze.trades`, `gold.ohlcv_1m` cũ dần | `query_metric table_freshness_seconds`, alert A002, A003 |
+| 03:06 | Job `bronze_trades` bắt đầu FAILED vì cast lỗi | `get_job_runs` |
+| 03:08–03:09 | Bảng `bronze.trades_raw`, `gold.ohlcv_1m` cũ dần | `query_metric table_freshness_seconds`, alert A002, A003 |
 | 03:12 | Coinbase BTC-USD có đỉnh tải thật (đây là **nhiễu**, không phải lỗi) | alert A004 |
 
-**Đáp án:** gốc của sự cố là `finobs:raw.binance_trades`, tức nguồn Binance đổi API.
-- Job `bronze_load` không phải gốc: đó chỉ là nơi lỗi lộ ra.
+**Đáp án:** gốc của sự cố là `finobs:raw.binance.trade`, tức nguồn Binance đổi API.
+- Job `bronze_trades` không phải gốc: đó chỉ là nơi lỗi lộ ra.
 - Coinbase cũng không phải gốc: nó nằm trên cùng nhánh upstream và có alert, nhưng alert đó
   là đỉnh tải thật của thị trường.
 
@@ -66,12 +66,12 @@ Agent tốt phải loại được cả hai nhánh sai này. Mọi số liệu �
 
 [`marquez.py`](marquez.py) gọi `GET /api/v1/lineage?nodeId=dataset:<ns>:<name>&depth=N` rồi tự
 duyệt cạnh để lấy upstream/downstream. Quy ước tên khớp với `asset` trong kịch bản đánh giá:
-dataset `finobs:raw.binance_trades` là node `dataset:finobs:raw.binance_trades` trong Marquez.
+dataset `finobs:raw.binance.trade` là node `dataset:finobs:raw.binance.trade` trong Marquez.
 
 `FakeTransport` trả JSON **cùng định dạng** response của Marquez, nên chế độ giả và chế độ thật
 đi qua cùng một đường code. Test cũng dựng một HTTP server cục bộ để chạy qua `HttpTransport`.
 
-Để chạy với Marquez thật (cần nhánh `tattu/6-airflow-marquez`, xem `docs/airflow-marquez.md`):
+Để chạy với Marquez thật (xem `docs/airflow-marquez.md`):
 
 ```bash
 docker compose --env-file .env -f infra/docker-compose.yml up -d marquez-postgres marquez-api
@@ -79,15 +79,33 @@ python -m agent.tools.seed_marquez --marquez-url http://localhost:5000   # nạp
 make lineage MARQUEZ_URL=http://localhost:5000
 ```
 
+## Metric store
+
+[`metric_store.py`](metric_store.py) đọc bảng `metric_observations` mà service `metrics-collector`
+ghi mỗi phút (`trade_count_1m`, `ingest_delay_p95_ms`, `last_live_trade_age_seconds`). Đơn vị lấy
+từ `observability/metric_catalog.yaml`. Giá trị null (ví dụ `source_unavailable`) giữ nguyên là null.
+
+```python
+from agent.tools.registry import Toolbox
+tb = Toolbox.with_metric_store("postgresql://finobs:<mật khẩu>@localhost:5435/finobs_metrics")
+tb.call("query_metric", {"metric": "trade_count_1m", "group": {"source": "binance"},
+                         "start": "2026-11-25T05:00:00.000Z", "end": "2026-11-25T06:00:00.000Z"})
+```
+
+DB không kết nối được thì tool trả `backend_unavailable`; không có dòng nào khớp thì `not_found`.
+Test tích hợp (`tests/test_metric_store.py`) chỉ chạy khi có biến `FINOBS_METRIC_DSN`.
+
+Tên dataset theo [quy ước đặt tên lineage](../../docs/conventions/lineage-naming.md): trùng tên topic
+Kafka / bảng Iceberg thật (`raw.binance.trade`, `bronze.trades_raw`...).
+
 ## Việc tiếp theo
 
-- **Kiểm tra với Marquez thật.** Phần này chưa chạy được, vì compose có Marquez chưa được merge
-  vào `main`. Định dạng response dựa trên tài liệu API của Marquez, nên cần xác nhận lại khi chạy thật.
-- Khi Airflow phát sự kiện OpenLineage thật, đổi `fake_world.JOBS` theo tên DAG/task thật, rồi
-  thống nhất tên dataset với `evaluation/scenarios/*.yaml`.
-- Thay dữ liệu giả của 4 tool còn lại bằng backend thật mà không đổi schema:
-  - `query_metric`, `list_alerts`: metric store của Hạnh (`observability/store`).
-  - `get_contract_violations`: kết quả của `platform/contracts/validate.py`.
+- Khi job Spark/Airflow phát OpenLineage thật (S3), chạy lại `make lineage MARQUEZ_URL=...` để xác
+  nhận đồ thị thật khớp tên trong `fake_world.JOBS`.
+- Thay dữ liệu giả của 3 tool còn lại bằng backend thật mà không đổi schema:
+  - `list_alerts`: khi có detector (S3–S4).
+  - `get_contract_violations`: đếm từ topic `raw.dlq` (header `finobs.errors`) hoặc metric Prometheus
+    `finobs_producer_records_total{result="invalid"}`.
   - `get_job_runs`: API runs của Marquez hoặc Airflow.
 - Metric `table_freshness_seconds` hiện chỉ có trong dữ liệu giả. Cần đề xuất thêm vào metric catalog.
 - Viết vòng lặp agent (prompt trong `agent/prompts/`) dùng `tb.definitions()` và `tb.call()`,
