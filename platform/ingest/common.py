@@ -15,6 +15,7 @@ from __future__ import annotations
 import gzip
 import json
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -109,14 +110,25 @@ def make_event(
 class RawWriter:
     """Ghi NDJSON nén gzip vào <root>/<source>/<YYYY-MM-DD>/<HH>.jsonl.gz"""
 
-    def __init__(self, root, source: str, flush_every: int = 200):
+    def __init__(self, root, source: str, flush_every: int = 200, flush_seconds: float | None = None,
+                 file_per_process: bool = False):
+        """flush_seconds: flush thêm theo thời gian, để người đọc file đang ghi (collector)
+        không phải chờ đủ flush_every bản ghi với nguồn ít giao dịch.
+
+        file_per_process: mỗi tiến trình ghi file riêng <HH>.<epoch>.jsonl.gz thay vì nối
+        vào <HH>.jsonl.gz. Dùng cho producer chạy liên tục: nếu tiến trình trước bị dừng
+        giữa chừng, file của nó chỉ bị cụt ở cuối (đọc được tới đó); nối member gzip mới
+        sau một khối nén dở sẽ làm hỏng cả phần sau khi giải nén."""
         self.root = Path(root)
         self.source = source
         self.flush_every = flush_every
+        self.flush_seconds = flush_seconds
+        self.part = f".{int(time.time())}" if file_per_process else ""
         self.count = 0
         self._fh = None
         self._hour_key = None
         self._since_flush = 0
+        self._last_flush = time.monotonic()
         self._lock = threading.Lock()
 
     def _open_for(self, now: datetime) -> None:
@@ -126,7 +138,7 @@ class RawWriter:
             self.root
             / self.source
             / now.strftime("%Y-%m-%d")
-            / f"{now.strftime('%H')}.jsonl.gz"
+            / f"{now.strftime('%H')}{self.part}.jsonl.gz"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         # "at" = append text, không đè file nếu chạy lại trong cùng giờ
@@ -144,9 +156,14 @@ class RawWriter:
             self._fh.write(line + "\n")
             self.count += 1
             self._since_flush += 1
-            if self._since_flush >= self.flush_every:
+            due = (
+                self.flush_seconds is not None
+                and time.monotonic() - self._last_flush >= self.flush_seconds
+            )
+            if self._since_flush >= self.flush_every or due:
                 self._fh.flush()
                 self._since_flush = 0
+                self._last_flush = time.monotonic()
 
     def close(self) -> None:
         with self._lock:
