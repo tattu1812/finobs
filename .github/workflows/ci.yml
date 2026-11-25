@@ -25,6 +25,20 @@ jobs:
       - name: Lint Python files
         run: ruff check .
 
+      - name: Install contract validator
+        run: pip install jsonschema==4.26.0
+
+      - name: Validate data contracts (fixtures)
+        run: make validate-contracts PY=python VALIDATE_IN=tests/fixtures/raw
+
+      - name: Validate evaluation scenarios
+        run: |
+          pip install pyyaml==6.0.2
+          make validate-scenarios PY=python
+
+      - name: Test agent tools (fake data + Marquez client)
+        run: make test-agent PY=python
+
       - name: Prepare environment
         run: cp .env.example .env
 
