@@ -15,6 +15,7 @@ nhiều nguồn (Binance, Coinbase, VN30 qua vnstock), kiểm tra dữ liệu th
 - [Trạng thái dự án](#trạng-thái-dự-án)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Cài đặt](#cài-đặt)
+- [Khởi chạy hạ tầng](#khởi-chạy-hạ-tầng)
 - [Sử dụng](#sử-dụng)
 - [Quy ước dữ liệu](#quy-ước-dữ-liệu)
 - [Kiểm thử và CI](#kiểm-thử-và-ci)
@@ -35,31 +36,38 @@ flowchart LR
     B & C & V --> R[Recorder<br/>platform/ingest]
     R --> RAW[(raw NDJSON.gz)]
     RAW --> K[Kafka]
-    K --> S[Spark<br/>bronze → gold]
-    S --> L[(MinIO / Lakehouse)]
+    K --> S[Spark]
+    S --> ICE[(Iceberg trên MinIO)]
+    ICE --> T[Trino]
+    AF[Airflow] -. điều phối .-> S
+    AF -. OpenLineage .-> MQ[Marquez]
     RAW --> CT[Data contracts]
     RAW --> M[Collectors → metric store<br/>PostgreSQL]
     M --> D[Detectors / Alerts]
-    D --> A[RCA Agent<br/>5 tools + Marquez lineage]
+    D --> A[RCA Agent<br/>5 tools]
+    MQ --> A
+    PR[Prometheus + Grafana] -. giám sát .-> S
     E[Evaluation<br/>scenarios + injector] -.-> RAW
     E -.-> A
 ```
 
-Các khối có trong repo nhưng chưa được hiện thực: Kafka → Spark → Lakehouse, detector, vòng lặp agent, injector và
-benchmark (xem bảng dưới).
+Hạ tầng của mọi khối trên đã chạy được bằng Docker Compose. Phần còn thiếu là **luồng dữ liệu nối các khối**
+(recorder → Kafka → Spark → Iceberg), các job Airflow, detector, vòng lặp agent và benchmark (xem bảng dưới).
 
 ## Trạng thái dự án
 
 | Mảng | Đã có | Chưa có |
 |---|---|---|
-| **Hạ tầng** | Docker Compose: Kafka 3.9 (KRaft), MinIO, Spark master/worker; Makefile; CI | Helm, cấu hình triển khai |
+| **Hạ tầng** | Docker Compose: Kafka, MinIO, Spark, Iceberg REST + Trino, Airflow, Marquez, Prometheus + Grafana; Helm chart phác thảo (mới có template Trino); CI | Template Helm cho các thành phần còn lại, cấu hình production |
 | **Ingest** | Recorder Binance/Coinbase (WebSocket), vnstock (poll VCI), `clock_check`, `analyze` | Producer đẩy vào Kafka |
 | **Data contract** | 3 JSON Schema (envelope, Binance, Coinbase), `validate.py`, 22 fixture lỗi | Schema vnstock |
-| **Xử lý dữ liệu** | — | Streaming, batch, dbt, DAG |
-| **Observability** | Metric catalog, collector `trade_count_1m`, schema PostgreSQL cho metric store | Detector, SLO, reconcile, cross-source, incident |
+| **Xử lý dữ liệu** | Bảng Iceberg mẫu để thử kết nối | Job Spark (bronze → gold), DAG Airflow, dbt |
+| **Lineage** | Marquez nhận sự kiện OpenLineage (thử bằng API) | Airflow/Spark tự phát lineage |
+| **Giám sát hạ tầng** | Dashboard Grafana, alert `SparkMasterDown` / `SparkWorkerDown` | Gửi thông báo (Alertmanager) |
+| **Observability dữ liệu** | Metric catalog, collector `trade_count_1m`, schema PostgreSQL cho metric store | Detector, SLO, reconcile, cross-source, incident |
 | **Agent** | 5 tool + JSON schema, client Marquez, dữ liệu giả theo kịch bản S002, 21 test | Prompt, vòng lặp gọi LLM, dữ liệu thật |
 | **Evaluation** | Fault taxonomy FT01–FT12, scenario schema, 4 kịch bản, validator, unit test | Injector, bench, kết quả |
-| **API / Dashboard** | — | Chưa bắt đầu |
+| **API / Dashboard nghiệp vụ** | — | Chưa bắt đầu |
 
 **Kết quả Sprint 1** (thu thật 60 phút, 2026-10-27 02:48–03:48 UTC): 231 859 trade từ 20 mã, 0 reconnect, 100%
 bản ghi đạt contract. Độ trễ p50/p99: Binance 7/42 ms, Coinbase 160/272 ms. Chi tiết trong
@@ -74,9 +82,13 @@ bản ghi đạt contract. Độ trễ p50/p99: Binance 7/42 ms, Coinbase 160/27
 finobs/
 ├── agent/tools/          # 5 tool cho agent chẩn đoán, schema JSON, client Marquez, dữ liệu giả
 ├── config/symbols.json   # Danh sách mã theo từng nguồn
-├── docs/                 # Báo cáo sprint, slide, ghi chú paper, bản nháp báo cáo LaTeX
+├── docs/                 # Báo cáo sprint, hướng dẫn hạ tầng, ghi chú paper, bản nháp báo cáo LaTeX
 ├── evaluation/           # Fault taxonomy, scenario YAML, validator, handoff Sprint 2
-├── infra/                # docker-compose.yml (Helm, configs: dự kiến)
+├── infra/
+│   ├── docker-compose.yml
+│   ├── airflow/dags/     # DAG Airflow (mount vào container)
+│   ├── configs/          # Cấu hình Marquez, Prometheus, Grafana, Spark metrics, Trino catalog
+│   └── helm/finobs/      # Helm chart phác thảo
 ├── observability/        # Metric catalog, collector, SQL cho metric store
 ├── platform/
 │   ├── contracts/        # JSON Schema cho raw event + validate.py
@@ -94,8 +106,9 @@ Các thư mục chỉ chứa `.gitkeep` (`api/`, `dashboards/`, `platform/stream
 ### Yêu cầu
 
 - Git, GNU Make
-- Docker Engine hoặc Docker Desktop, kèm Docker Compose
+- Docker Engine hoặc Docker Desktop, kèm Docker Compose. Chạy toàn bộ stack (15 container) nên cấp cho Docker ít nhất 8 GB RAM.
 - Python 3.11 trở lên
+- Helm 3 (chỉ khi làm việc với Helm chart)
 
 Trên Windows nên dùng **WSL2 Ubuntu** và bật Docker Desktop WSL integration.
 
@@ -110,35 +123,99 @@ docker info   # Docker daemon phải đang chạy
 git clone https://github.com/tattu1812/finobs.git
 cd finobs
 
-cp .env.example .env      # rồi sửa MINIO_ROOT_PASSWORD và các cổng nếu cần
+cp .env.example .env      # rồi đổi toàn bộ mật khẩu
 make venv                 # tạo .venv và cài requirements-ingest.txt
 ```
 
-Biến môi trường trong `.env`:
+### Biến môi trường (`.env`)
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
+| `COMPOSE_PROJECT_NAME` | `finobs` | Tên project Docker Compose |
 | `KAFKA_PORT` | `9092` | Cổng Kafka cho client trên máy host |
 | `MINIO_API_PORT` / `MINIO_CONSOLE_PORT` | `9000` / `9001` | API và giao diện MinIO |
-| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `finobs` / `change_me_before_use` | Tài khoản MinIO. **Đổi mật khẩu trước khi dùng** |
-| `SPARK_UI_PORT` | `8080` | Spark Master UI |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `finobs` / `change_me_before_use` | Tài khoản MinIO, dùng chung cho Iceberg và Trino |
+| `SPARK_UI_PORT` | `8082` | Spark Master UI |
+| `AIRFLOW_PORT` | `8080` | Airflow Web UI |
+| `AIRFLOW_DB_PASSWORD` | `change_me_before_use` | Mật khẩu PostgreSQL của Airflow |
+| `MARQUEZ_DB_PASSWORD` | `change_me` | Mật khẩu PostgreSQL của Marquez |
+| `GRAFANA_ADMIN_PASSWORD` | `change-me-for-local-development` | Mật khẩu `admin` của Grafana. **Bắt buộc**, thiếu thì `make check` báo lỗi |
 
-Không commit `.env` hay mật khẩu thật lên GitHub (`.env` đã có trong `.gitignore`).
+Không commit `.env` hay mật khẩu thật lên GitHub (`.env` đã có trong `.gitignore`). Khi `.env.example` có biến mới,
+nhớ chép biến đó sang `.env` của bạn.
 
-## Sử dụng
-
-### Hạ tầng
+## Khởi chạy hạ tầng
 
 ```bash
 make check     # kiểm tra cấu hình Docker Compose
-make up        # khởi chạy Kafka, MinIO, Spark master, Spark worker
+make up        # khởi chạy toàn bộ dịch vụ
 make ps        # xem trạng thái container
 ```
 
-- MinIO Console: <http://localhost:9001>
-- Spark Master UI: <http://localhost:8080>
+### Dịch vụ và cổng
 
-`make down` xóa container nhưng giữ volume. Không dùng `docker compose down -v` nếu cần giữ dữ liệu.
+| Dịch vụ | Địa chỉ trên máy host | Ghi chú |
+|---|---|---|
+| Kafka | `localhost:9092` | Trong mạng Docker: `kafka:29092` |
+| MinIO API / Console | <http://localhost:9000> / <http://localhost:9001> | Đăng nhập bằng `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| Spark Master | `spark://localhost:7077`, UI <http://localhost:8082> | |
+| Iceberg REST Catalog | <http://localhost:8181> | Catalog lưu trong SQLite (volume `iceberg_catalog_data`) |
+| Trino | <http://localhost:8081> | Catalog `iceberg` |
+| Airflow | <http://localhost:8080> | Cần tạo tài khoản admin lần đầu (xem dưới) |
+| Marquez API | <http://localhost:5000> | Chưa có Web UI |
+| Prometheus | <http://localhost:9090> | |
+| Grafana | <http://localhost:3000> | Tài khoản `admin` / `GRAFANA_ADMIN_PASSWORD` |
+
+Hai container `finobs-iceberg-init` và `finobs-airflow-init` dừng với trạng thái `Exited (0)` là bình thường: chúng
+chỉ chạy một lần để chuẩn bị volume và migrate database Airflow.
+
+### Chuẩn bị lần đầu
+
+1. **Tạo bucket `finobs-warehouse` trong MinIO** (bắt buộc cho Iceberg): vào MinIO Console → *Buckets* → *Create Bucket*.
+2. **Tạo tài khoản admin Airflow:**
+
+   ```bash
+   docker compose --env-file .env -f infra/docker-compose.yml run --rm --entrypoint airflow airflow-init \
+     users create --username admin --firstname FinObs --lastname Admin --role Admin --email admin@finobs.local
+   ```
+
+### Kiểm tra nhanh
+
+```bash
+docker exec finobs-trino trino --execute "SHOW CATALOGS"      # phải có catalog iceberg
+curl -i http://localhost:5000/api/v1/namespaces               # Marquez trả 200 OK
+```
+
+Prometheus targets: <http://localhost:9090/targets>. Grafana: thư mục *FinObs* → dashboard
+*FinObs - Infrastructure Monitoring*.
+
+### Thử Iceberg qua Trino
+
+```bash
+docker exec finobs-trino trino --execute \
+  "CREATE SCHEMA IF NOT EXISTS iceberg.finobs_test WITH (location = 's3://finobs-warehouse/finobs_test/')"
+
+docker exec finobs-trino trino --execute \
+  "CREATE TABLE IF NOT EXISTS iceberg.finobs_test.transactions (transaction_id BIGINT, amount DOUBLE, status VARCHAR)"
+
+docker exec finobs-trino trino --execute \
+  "INSERT INTO iceberg.finobs_test.transactions VALUES (1, 150.50, 'SUCCESS'), (2, 299.99, 'SUCCESS'), (3, 75.00, 'FAILED')"
+
+docker exec finobs-trino trino --execute \
+  "SELECT * FROM iceberg.finobs_test.transactions ORDER BY transaction_id"
+```
+
+Chạy lại `INSERT` sẽ thêm bản ghi trùng ID vì bảng mẫu không có ràng buộc duy nhất. Cảnh báo
+`Unable to create a system terminal` của Trino CLI không ảnh hưởng kết quả.
+
+### Dừng và dữ liệu
+
+`make stop` dừng container; `make down` xóa container nhưng **giữ volume** (dữ liệu Kafka, MinIO, catalog Iceberg,
+PostgreSQL, Prometheus, Grafana). Không dùng `docker compose down -v` nếu cần giữ dữ liệu.
+
+Cấu hình hiện tại chỉ dành cho môi trường phát triển và demo, chưa phải production.
+
+## Sử dụng
 
 ### Thu và phân tích dữ liệu
 
@@ -190,6 +267,7 @@ Xem [agent/tools/README.md](agent/tools/README.md).
 | `make validate-contracts` | Validate data contract |
 | `make validate-scenarios` | Validate scenario evaluation |
 | `make test-agent` | Test các tool của agent |
+| `make test-observability` | Test collector `trade_count_1m` |
 | `make lineage` | In đồ thị lineage |
 
 > **Lưu ý:** script trong `platform/` phải chạy bằng đường dẫn file (`python platform/ingest/record.py`), không dùng
@@ -215,16 +293,18 @@ GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy tr�
 1. `ruff check .`
 2. `make validate-contracts` trên fixtures
 3. `make validate-scenarios`
-4. `make test-agent`
+4. `make test-agent` và `make test-observability`
 5. Kiểm tra cấu hình Docker Compose
+6. `helm lint` và `helm template` cho `infra/helm/finobs`
 
 Chạy lại ở máy local trước khi mở PR:
 
 ```bash
 .venv/bin/pip install ruff==0.9.10
 .venv/bin/ruff check .
-make validate-contracts validate-scenarios test-agent
-.venv/bin/python -m unittest tests.test_trade_count_collector -v
+make validate-contracts validate-scenarios test-agent test-observability
+make check
+helm lint infra/helm/finobs        # nếu có sửa Helm chart
 ```
 
 ## Quy trình đóng góp
@@ -233,103 +313,17 @@ make validate-contracts validate-scenarios test-agent
 - Tạo nhánh riêng cho mỗi việc, không push thẳng lên `main`.
 - Commit message nên theo dạng `type(scope): mô tả`, ví dụ `feat(ingest): ...`, `docs(s1): ...`.
 - Không commit `.env`, `data/`, `.venv/` hay file `__pycache__`.
+- Thêm biến môi trường mới thì cập nhật cả `.env.example` và bảng biến môi trường trong README.
 
-## 8. Iceberg + Trino(S2)
-Bổ sung Apache Iceberg REST Catalog và Trino vào hạ tầng FinObs. Cấu hình nằm trên nhánh tattu/3-iceberg-trino
-
-### 8.1. Các thành phần: MinIO, Iceberg REST Catalog, SQLite, Trino, iceberg-init
-### 8.2. Chuẩn bị MinIO
-1. Truy cập MinIO Console tại http://localhost:9001.
-
-2. Đăng nhập bằng thông tin trong file .env.
-
-3. Mở mục Buckets.
-
-4. Tạo bucket có tên finobs-warehouse.
-### 8.3. Khởi động
-Chạy lần lượt các lệnh:
-
-make check -> make up -> make ps
-
-Các dịch vụ bổ sung gồm:
-
-
-Iceberg REST Catalog -> http://localhost:8181
-
-Trino HTTP endpoint -> http://localhost:8081
-
-MinIO Console -> http://localhost:9001
-
-iceberg-init kết thúc với trạng thái Exited (0) là bình thường, vì container này chỉ thực hiện bước khởi tạo quyền cho volume.
-### 8.4. Kiểm tra kết nối Iceberg
-```bash
-docker exec finobs-trino trino --execute "SHOW CATALOGS"
-```
-Kết quả cần có catalog iceberg.
-
-### 8.5. Tạo schema và bảng mẫu
-```bash
-docker exec finobs-trino trino --execute \
-"CREATE SCHEMA iceberg.finobs_test
-WITH (location = 's3://finobs-warehouse/finobs_test/')"
-
-docker exec finobs-trino trino --execute \
-"CREATE TABLE iceberg.finobs_test.transactions (
-    transaction_id BIGINT,
-    amount DOUBLE,
-    status VARCHAR
-)"
-```
-Các lệnh tạo schema và bảng chỉ cần chạy một lần. Nếu đối tượng đã tồn tại, bỏ qua bước tạo tương ứng.
-
-### 8.6. Ghi và truy vấn dữ liệu
-```bash
-docker exec finobs-trino trino --execute \
-"INSERT INTO iceberg.finobs_test.transactions
-VALUES
-    (1, 150.50, 'SUCCESS'),
-    (2, 299.99, 'SUCCESS'),
-    (3, 75.00, 'FAILED')"
-
-docker exec finobs-trino trino --execute \
-"SELECT transaction_id, amount, status
-FROM iceberg.finobs_test.transactions
-ORDER BY transaction_id"
-```
-Kết quả mẫu:
-
-"1","150.5","SUCCESS"
-"2","299.99","SUCCESS"
-"3","75.0","FAILED"
-
-Lưu ý: Chạy lại lệnh INSERT sẽ thêm các bản ghi trùng ID vì bảng mẫu chưa khai báo ràng buộc duy nhất.
-
-### 8.7. Kiểm tra dữ liệu sau khi tạo lại Iceberg REST Catalog
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml \
-  up -d --force-recreate iceberg-rest
-```
-Sau đó chạy lại câu lệnh SELECT ở mục 8.6. Dữ liệu đã ghi cần tiếp tục truy vấn được.
-
-SQLite Catalog được lưu trong Docker named volume iceberg_catalog_data, còn dữ liệu bảng được lưu trong MinIO. Không chạy docker compose down -v nếu muốn giữ dữ liệu.
-
-### 8.8. Lưu ý triển khai
-
-Đây là cấu hình phục vụ môi trường phát triển và demo, chưa phải cấu hình production.
-
-Bucket finobs-warehouse hiện cần tạo thủ công.
-
-Không commit .env hoặc mật khẩu thật.
-
-Trino sử dụng cổng 8081 trên máy host để tránh xung đột với Spark Master UI ở cổng 8080.
-
-Cảnh báo Unable to create a system terminal, creating a dumb terminal từ Trino CLI không ảnh hưởng đến kết quả truy vấn.
 ## Tài liệu
 
 | Tài liệu | Nội dung |
 |---|---|
 | [docs/sprint1/summary.md](docs/sprint1/summary.md) | Tóm tắt Sprint 1 trong một trang |
 | [docs/sprint1/report.md](docs/sprint1/report.md) | Báo cáo đầy đủ Sprint 1 |
+| [docs/airflow-marquez.md](docs/airflow-marquez.md) | Triển khai và kiểm thử Airflow, Marquez, OpenLineage |
+| [docs/monitoring.md](docs/monitoring.md) | Prometheus, Grafana, alert rules |
+| [infra/helm/finobs/README.md](infra/helm/finobs/README.md) | Helm chart phác thảo |
 | [docs/papers/](docs/papers/) | Ghi chú paper Dataflow Model và Lakehouse |
 | [platform/contracts/README.md](platform/contracts/README.md) | Data contract tầng raw |
 | [observability/metric_catalog.yaml](observability/metric_catalog.yaml) | Định nghĩa metric |

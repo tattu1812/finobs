@@ -13,7 +13,7 @@ ifeq ($(PY),$(VENV)/bin/python)
 PY_DEP := $(VENV)/.installed
 endif
 
-.PHONY: help check up down stop restart ps logs venv clock-check record analyze validate-contracts validate-scenarios test-agent lineage
+.PHONY: help check up down stop restart ps logs venv clock-check record analyze validate-contracts validate-scenarios test-agent test-observability lineage
 
 help:
 	@echo "FinObs commands:"
@@ -35,6 +35,7 @@ help:
 	@echo ""
 	@echo "Agent:"
 	@echo "  make test-agent         - Test 5 tool agent trên dữ liệu giả + client Marquez"
+	@echo "  make test-observability - Test collector trade_count_1m"
 	@echo "  make lineage            - In đồ thị lineage (MARQUEZ_URL=http://localhost:5000 để dùng Marquez thật)"
 
 check:
@@ -80,6 +81,9 @@ validate-contracts: $(PY_DEP)
 
 test-agent: $(PY_DEP)
 	$(PY) -m unittest tests.test_agent_tools -v
+
+test-observability: $(PY_DEP)
+	$(PY) -m unittest tests.test_trade_count_collector -v
 
 lineage: $(PY_DEP)
 	$(PY) -m agent.tools.lineage_graph --alerts $(if $(MARQUEZ_URL),--marquez-url $(MARQUEZ_URL))
