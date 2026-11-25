@@ -1,21 +1,21 @@
 # FinObs Helm Chart
 
-## 1. Muc tieu
+## 1. Mục tiêu
 
-Ban phac thao Helm chart cho ha tang FinObs trong Sprint 2.
+Bản phác thảo Helm chart cho hạ tầng FinObs trong Sprint 2.
 
-Chart duoc su dung de thiet ke cau hinh trien khai
-FinObs tren Kubernetes trong cac sprint tiep theo.
+Chart được sử dụng để thiết kế cấu hình triển khai
+FinObs trên Kubernetes trong các sprint tiếp theo.
 
-## 2. Cau truc
+## 2. Cấu trúc
 
-- Chart.yaml: Thong tin Helm chart.
-- values.yaml: Cau hinh du kien cho cac thanh phan FinObs.
-- templates/_helpers.tpl: Ham dat ten va gan nhan Kubernetes.
+- Chart.yaml: Thông tin Helm chart.
+- values.yaml: Cấu hình dự kiến cho các thành phần FinObs.
+- templates/_helpers.tpl: Hàm đặt tên và gắn nhãn Kubernetes.
 - templates/trino-service.yaml: Kubernetes Service cho Trino.
 - templates/trino-deployment.yaml: Kubernetes Deployment cho Trino.
 
-## 3. Thanh phan trong values.yaml
+## 3. Thành phần trong values.yaml
 
 - Kafka
 - MinIO
@@ -25,12 +25,12 @@ FinObs tren Kubernetes trong cac sprint tiep theo.
 - Airflow
 - Marquez
 
-Luu y: Hien tai chi Trino co Kubernetes templates.
-Cac thanh phan con lai moi duoc khai bao cau hinh du kien.
+Lưu ý: Hiện tại chỉ Trino có Kubernetes templates.
+Các thành phần còn lại mới được khai báo cấu hình dự kiến.
 
-## 4. Kiem tra Helm chart
+## 4. Kiểm tra Helm chart
 
-Kiem tra cu phap:
+Kiểm tra cú pháp:
 
     helm lint infra/helm/finobs
 
@@ -38,21 +38,21 @@ Render Kubernetes manifests:
 
     helm template finobs infra/helm/finobs
 
-Kiem tra tat Trino:
+Kiểm tra tắt Trino:
 
     helm template finobs infra/helm/finobs --set trino.enabled=false
 
-## 5. Gioi han hien tai
+## 5. Giới hạn hiện tại
 
-- Chua trien khai thuc te len Kubernetes.
-- Chua co templates cho Kafka, MinIO, Spark, Iceberg, Airflow va Marquez.
-- Chua cau hinh Iceberg Catalog va MinIO cho Trino tren Kubernetes.
-- Chua cau hinh Secret, PersistentVolumeClaim va cac phu thuoc day du.
-- Chua san sang cho moi truong production.
+- Chưa triển khai thực tế lên Kubernetes.
+- Chưa có templates cho Kafka, MinIO, Spark, Iceberg, Airflow và Marquez.
+- Chưa cấu hình Iceberg Catalog và MinIO cho Trino trên Kubernetes.
+- Chưa cấu hình Secret, PersistentVolumeClaim và các phụ thuộc đầy đủ.
+- Chưa sẵn sàng cho môi trường production.
 
-## 6. Huong phat trien
+## 6. Hướng phát triển
 
-- Bo sung templates cho cac thanh phan con lai.
-- Quan ly credentials bang Kubernetes Secrets.
-- Bo sung persistent storage va health checks.
-- Kiem thu tich hop tren Kubernetes.
+- Bổ sung templates cho các thành phần còn lại.
+- Quản lý credentials bằng Kubernetes Secrets.
+- Bổ sung persistent storage và health checks.
+- Kiểm thử tích hợp trên Kubernetes.
