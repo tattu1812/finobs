@@ -92,6 +92,24 @@ Các trạng thái:
 Lưu ý: Alert Rules hiện chỉ được đánh giá trong Prometheus.
 Chưa cấu hình gửi thông báo qua email, Telegram hoặc Alertmanager.
 
+## 5b. Pipeline health và Alertmanager (Sprint 3)
+
+Ngoài 5 trụ cột, hệ thống giám sát sức khỏe pipeline (yêu cầu của đề):
+
+| Alert | Điều kiện | Nguồn metric |
+|---|---|---|
+| StreamStalled | Job streaming không có micro-batch mới quá 5 phút | `finobs_stream_last_progress_timestamp_seconds` (exporter trong job Spark) |
+| KafkaConsumerLagHigh | Job chậm hơn Kafka > 50 000 offset trong 10 phút | `finobs_stream_offsets_behind_latest` |
+| GoldStale | `gold.ohlcv_1m` không cập nhật quá 10 phút | `finobs_gold_last_minute_timestamp_seconds` |
+| SilverLateRowsHigh | > 1 000 bản ghi trễ > 10 phút bị bỏ khỏi silver trong 15 phút | `finobs_silver_late_rows_total` |
+| AirflowDagFailed | Lượt chạy DAG gần nhất thất bại | `finobs_airflow_dag_last_run_success` (`pipeline-exporter`) |
+| AirflowDown | REST API Airflow không trả lời 5 phút | `finobs_airflow_up` |
+
+Prometheus gửi alert tới **Alertmanager** (<http://localhost:9093>). Đặt `TELEGRAM_BOT_TOKEN` và
+`TELEGRAM_CHAT_ID` trong `.env` thì alert được gửi vào nhóm Telegram (gom theo tên alert, nhắc lại sau 4 giờ);
+để trống thì Alertmanager chỉ ghi nhận. Cách lấy token: tạo bot bằng @BotFather, thêm bot vào nhóm, gọi
+`https://api.telegram.org/bot<token>/getUpdates` để đọc `chat.id` (nhóm là số âm).
+
 ## 6. Verification
 
 Kiểm tra Docker Compose:

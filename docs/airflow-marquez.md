@@ -131,11 +131,21 @@ make official-check                    # Trino: số trade, dãy ID, số file t
 
 Kết quả chạy thật ngày 2026-11-24: 10/10 task thành công, 9.220.592 trade, dãy trade ID liền mạch ở cả 10 mã.
 
+## 7b. DAG `iceberg_maintenance` (Sprint 3)
+
+Mỗi ngày 04:30 UTC, lần lượt từng bảng bronze/silver/gold: `optimize` (gộp file nhỏ), `expire_snapshots`
+(giữ 7 ngày), `remove_orphan_files`, qua Trino. Bảng chưa tồn tại thì task bỏ qua, các bảng sau vẫn chạy.
+Chạy thử ngày 2026-11-25: `bronze.trades_raw` từ 909 file còn 26, `bronze.binance_official_trades` từ 49 còn 10.
+
+Các job (producer, Spark, DAG) tự phát OpenLineage về Marquez qua `platform/lineage.py`. Job streaming gửi
+facet `jobType.processingType = STREAMING`: thiếu facet này, Marquez chỉ dựng cạnh lineage khi run COMPLETE,
+mà job streaming không bao giờ kết thúc.
+
 ## 8. Phạm vi hiện tại
 
 - Airflow Webserver và Scheduler hoạt động, DAG `binance_official_daily` chạy thật.
 - Marquez API tiếp nhận và lưu được sự kiện OpenLineage.
-- Chưa tích hợp Airflow tự động phát sự kiện OpenLineage.
+- Job tự phát OpenLineage (S3); đồ thị Marquez đủ raw → bronze → silver → gold.
 - Chưa triển khai giao diện Marquez Web UI; hiện kiểm thử qua API.
 
 ## 9. Lưu ý
