@@ -3,6 +3,8 @@ Sinh fixture nhỏ cho CI từ dữ liệu thu thật.
 
     python tests/fixtures/make_fixtures.py --in data/raw
 
+Thư mục vào cần có <source>/<ngày>/*.jsonl.gz cho binance, coinbase và kraken.
+
   raw/<source>/sample.jsonl  — bản ghi thật, phải hợp lệ 100%
   invalid/<lỗi>.jsonl        — mỗi file 1 bản ghi thật bị sửa đúng 1 chỗ, phải bị bắt
 """
@@ -41,7 +43,7 @@ def pick(root: Path, source: str) -> list[dict]:
     return [r for recs in by_symbol.values() for r in recs] + extra
 
 
-def mutations(binance: dict, coinbase: dict) -> dict:
+def mutations(binance: dict, coinbase: dict, kraken: dict) -> dict:
     def mut(base, fn):
         rec = copy.deepcopy(base)
         fn(rec)
@@ -62,7 +64,7 @@ def mutations(binance: dict, coinbase: dict) -> dict:
         "missing_payload_field": mut(coinbase, lambda r: r["payload"].pop("side")),
         "unknown_envelope_field": mut(binance, lambda r: r.update(price="1")),
         "unknown_payload_field": mut(binance, lambda r: r["payload"].update(b=123)),
-        "unknown_source": mut(binance, lambda r: r.update(source="kraken")),
+        "unknown_source": mut(binance, lambda r: r.update(source="okx")),
         "schema_major_2": mut(coinbase, lambda r: r.update(schema_version="2.0.0")),
         "coinbase_trade_id_int": mut(coinbase, lambda r: r["payload"].update(trade_id=int(r["payload"]["trade_id"]))),
         "coinbase_missing_is_snapshot": mut(coinbase, lambda r: r["transport"].pop("is_snapshot")),
@@ -70,6 +72,11 @@ def mutations(binance: dict, coinbase: dict) -> dict:
         "binance_batch_2": mut(binance, lambda r: r["transport"].update(batch_size=2)),
         "event_id_mismatch": mut(binance, lambda r: r.update(event_id="binance:BTCUSDT:1")),
         "payload_id_mismatch": mut(coinbase, lambda r: r["payload"].update(trade_id="1")),
+        # Kraken (contract 1.1.0): sàn gửi số JSON, producer phải đổi thành chuỗi nguyên văn.
+        "kraken_price_as_number": mut(kraken, lambda r: r["payload"].update(price=float(r["payload"]["price"]))),
+        "kraken_trade_id_string": mut(kraken, lambda r: r["payload"].update(trade_id=str(r["payload"]["trade_id"]))),
+        "kraken_symbol_dash": mut(kraken, lambda r: r.update(symbol_native=r["symbol_canonical"])),
+        "kraken_msg_seq_int": mut(kraken, lambda r: r["transport"].update(msg_seq=1)),
     }
 
 
@@ -86,12 +93,12 @@ def main() -> None:
     args = parser.parse_args()
     root = Path(args.indir)
 
-    samples = {source: pick(root, source) for source in ("binance", "coinbase")}
+    samples = {source: pick(root, source) for source in ("binance", "coinbase", "kraken")}
     for source, records in samples.items():
         write_jsonl(HERE / "raw" / source / "sample.jsonl", records)
         print(f"raw/{source}/sample.jsonl: {len(records)} bản ghi")
 
-    cases = mutations(samples["binance"][0], samples["coinbase"][0])
+    cases = mutations(samples["binance"][0], samples["coinbase"][0], samples["kraken"][0])
     for name, rec in cases.items():
         write_jsonl(HERE / "invalid" / f"{name}.jsonl", [rec])
     print(f"invalid/: {len(cases)} ca lỗi")

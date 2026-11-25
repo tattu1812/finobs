@@ -1,5 +1,5 @@
 {
-  "_comment": "20 mã: 6 mã trùng 2 sàn, 4 mã crypto thanh khoản thấp, 10 mã VN30 (dùng ở script vnstock riêng).",
+  "_comment": "Crypto: 10 mã mỗi sàn. 6 mã lớn (BTC ETH SOL XRP ADA DOGE) + ALGO có ở cả 3 sàn để đối chứng chéo C1; còn lại là mã thanh khoản thấp. Kraken dùng tên WS v2 (BTC/USD, không phải XBT). KHÔNG dùng ONE/USD của Kraken: giá ~0,12 USD, khác hẳn ONE (Harmony) của Binance ~0,0009 USD, tức là hai tài sản trùng ký hiệu (spread 19 704 bps, đo ngày 2026-11-25). 10 mã VN30 cho vnstock.",
 
   "binance": [
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT",
@@ -9,6 +9,11 @@
   "coinbase": [
     "BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD",
     "ALGO-USD", "SKL-USD", "BAND-USD", "CTSI-USD"
+  ],
+
+  "kraken": [
+    "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD", "DOGE/USD",
+    "ALGO/USD", "BAND/USD", "CTSI/USD", "CELR/USD"
   ],
 
   "vnstock": [

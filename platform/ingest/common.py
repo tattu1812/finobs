@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"  # 1.1.0: thêm nguồn kraken (MINOR)
 
 # Dùng để tách BTCUSDT -> BTC-USDT. Xếp mã dài trước để khớp đúng.
 _QUOTE_ASSETS = ("FDUSD", "USDT", "USDC", "BUSD", "TUSD", "BNB", "BTC", "ETH")
@@ -63,6 +63,11 @@ def canonical_binance(symbol: str) -> str:
 
 def canonical_coinbase(product_id: str) -> str:
     return product_id.upper()
+
+
+def canonical_kraken(symbol: str) -> str:
+    """Kraken v2 viết BASE/QUOTE (BTC/USD) -> BTC-USD."""
+    return symbol.upper().replace("/", "-")
 
 
 # --------------------------------------------------------------------------

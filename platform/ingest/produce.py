@@ -22,15 +22,22 @@ import asyncio
 import json
 import signal
 import statistics
+import sys
 from pathlib import Path
 
 import binance_ws
 import coinbase_ws
+import kraken_ws
+import vnstock_poll
 from clock_check import NTP_SERVERS, best, ntp_sample
 from common import OpsLog, RawWriter
-from sinks import ContractGate, KafkaWriter, Metrics, TeeWriter, make_kafka_producer
+from sinks import DLQ_TOPIC, ContractGate, KafkaWriter, Metrics, TeeWriter, make_kafka_producer, topic_for
 
-RUNNERS = {"binance": binance_ws.run, "coinbase": coinbase_ws.run}
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # platform/lineage.py
+from lineage import LineageEmitter  # noqa: E402
+
+RUNNERS = {"binance": binance_ws.run, "coinbase": coinbase_ws.run, "kraken": kraken_ws.run,
+           "vnstock": vnstock_poll.run_forever}  # vnstock: poll trong phiên HOSE, ngoài phiên thì ngủ
 HEARTBEAT_SECONDS = 30
 
 
@@ -94,7 +101,7 @@ async def heartbeat(writers: dict, stop: asyncio.Event) -> None:
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--bootstrap", default="localhost:9092")
-    parser.add_argument("--sources", default="binance,coinbase")
+    parser.add_argument("--sources", default="binance,coinbase,kraken")
     parser.add_argument("--symbols", default="config/symbols.json")
     parser.add_argument("--raw-out", default="", help="thư mục ghi thêm file raw; bỏ trống = không ghi")
     parser.add_argument("--ops-dir", default="data/raw", help="nơi ghi ops log khi không có --raw-out")
@@ -140,6 +147,9 @@ async def main() -> None:
         tasks.append(asyncio.create_task(
             clock_loop(OpsLog(ops_root, "producer"), metrics, args.clock_every, stop)))
 
+    lineage = LineageEmitter.from_env()
+    run = lineage.start("producer", outputs=[topic_for(s) for s in sources] + [DLQ_TOPIC], streaming=True)
+
     print(f"Producer: {', '.join(sources)} -> Kafka {args.bootstrap}"
           + (f", file {args.raw_out}" if args.raw_out else ""), flush=True)
     try:
@@ -153,6 +163,7 @@ async def main() -> None:
     for name, writer in writers.items():
         writer.close()
         print(f"{name}: {writer.count} bản ghi", flush=True)
+    lineage.complete(run)
 
 
 if __name__ == "__main__":
