@@ -11,6 +11,7 @@ import gzip
 import json
 import os
 import sys
+import zlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -53,42 +54,58 @@ def contract_tools():
     return load_validators(), SCHEMA_BY_SOURCE, FALLBACK, cross_checks
 
 
+def read_lines(path: Path):
+    """Đọc từng dòng; file .gz producer đang ghi dở (chưa có trailer) thì dừng ở phần đã flush.
+    File hỏng giữa chừng (tiến trình ghi bị giết) cũng chỉ đọc tới chỗ hỏng, không làm crash."""
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as stream:
+        try:
+            yield from stream
+        except EOFError:
+            return
+        except (gzip.BadGzipFile, zlib.error, UnicodeDecodeError) as exc:
+            print(f"[collector] {path}: dừng đọc ở đoạn hỏng ({exc})", file=sys.stderr)
+            return
+
+
 def first_valid_trades(root: Path) -> tuple[dict[str, tuple[datetime, dict]], Counter]:
+    return first_valid_trades_from(raw_files(root))
+
+
+def first_valid_trades_from(files) -> tuple[dict[str, tuple[datetime, dict]], Counter]:
     validators, schema_by_source, fallback, cross_checks = contract_tools()
     first: dict[str, tuple[datetime, dict]] = {}
     stats: Counter = Counter()
 
-    for path in raw_files(root):
-        opener = gzip.open if path.suffix == ".gz" else open
-        with opener(path, "rt", encoding="utf-8") as stream:
-            for line_number, line in enumerate(stream, 1):
-                if not line.strip():
-                    continue
-                stats["records_read"] += 1
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    stats["invalid_records"] += 1
-                    continue
+    for path in files:
+        for line_number, line in enumerate(read_lines(path), 1):
+            if not line.strip():
+                continue
+            stats["records_read"] += 1
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                stats["invalid_records"] += 1
+                continue
 
-                if not isinstance(record, dict):
-                    stats["invalid_records"] += 1
-                    continue
-                schema = schema_by_source.get(record.get("source"), fallback)
-                if not validators[schema].is_valid(record) or cross_checks(record):
-                    stats["invalid_records"] += 1
-                    continue
+            if not isinstance(record, dict):
+                stats["invalid_records"] += 1
+                continue
+            schema = schema_by_source.get(record.get("source"), fallback)
+            if not validators[schema].is_valid(record) or cross_checks(record):
+                stats["invalid_records"] += 1
+                continue
 
-                try:
-                    received = utc_time(record["ingest_time"])
-                except ValueError as exc:
-                    raise ValueError(f"{path}:{line_number}: {exc}") from exc
+            try:
+                received = utc_time(record["ingest_time"])
+            except ValueError as exc:
+                raise ValueError(f"{path}:{line_number}: {exc}") from exc
 
-                stats["valid_records"] += 1
-                event_id = record["event_id"]
-                previous = first.get(event_id)
-                if previous is None or received < previous[0]:
-                    first[event_id] = (received, record)
+            stats["valid_records"] += 1
+            event_id = record["event_id"]
+            previous = first.get(event_id)
+            if previous is None or received < previous[0]:
+                first[event_id] = (received, record)
 
     stats["duplicate_records"] = stats["valid_records"] - len(first)
     return first, stats
@@ -135,9 +152,12 @@ def write_to_store(rows: list[dict], dsn: str) -> None:
             "PostgreSQL output requires psycopg: install requirements-observability.txt"
         ) from exc
 
+    # Ép kiểu tường minh: psycopg gửi float là double precision, mà PostgreSQL không
+    # tự ép double -> numeric khi chọn hàm, nên metric có giá trị thực sẽ không ghi được.
     statement = """
         SELECT upsert_metric_observation(
-            %s, %s, %s, %s, %s, %s, %s, %s
+            %s::text, %s::jsonb, %s::timestamptz, %s::timestamptz, %s::timestamptz,
+            %s::numeric, %s::text, %s::bigint
         )
     """
     with psycopg.connect(dsn) as connection:
@@ -149,8 +169,8 @@ def write_to_store(rows: list[dict], dsn: str) -> None:
                         row["metric_name"],
                         Jsonb(row["dimensions"]),
                         utc_time(row["observed_at"]),
-                        utc_time(row["window_start"]),
-                        utc_time(row["window_end"]),
+                        utc_time(row["window_start"]) if row.get("window_start") else None,
+                        utc_time(row["window_end"]) if row.get("window_end") else None,
                         row["value"],
                         row["status"],
                         row["sample_count"],
