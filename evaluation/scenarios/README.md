@@ -18,6 +18,8 @@ Một file **PASS validation** mới chứng minh cấu trúc và một số đi
 | [`S001_coinbase_duplicate_burst.yaml`](S001_coinbase_duplicate_burst.yaml) | Sự cố | `FT03_duplicate_events` | Nhân bản 5% trade Coinbase, giữ event ID, trong 120 giây | `finobs:raw.coinbase.trade` |
 | [`S002_binance_schema_drift.yaml`](S002_binance_schema_drift.yaml) | Sự cố | `FT07_schema_drift` | Đổi trường `p` thành `price` và kiểu trường `t` trên ETHUSDT, trong 900 giây | `finobs:raw.binance.trade` |
 | [`S003_collector_clock_skew.yaml`](S003_collector_clock_skew.yaml) | Sự cố | `FT06_clock_skew` | Dịch `ingest_time` sớm 500 ms trên cả hai nguồn, trong 600 giây | `finobs:host.producer` |
+| [`S004_binance_volume_loss.yaml`](S004_binance_volume_loss.yaml) | Sự cố | `FT02_volume_loss` | Bỏ 30% trade BTCUSDT của Binance trong 300 giây (S3) | `finobs:raw.binance.trade` |
+| [`S005_coinbase_price_unit.yaml`](S005_coinbase_price_unit.yaml) | Sự cố | `FT09_value_anomaly` | Nhân giá Coinbase BTC-USD × 1000 trong 180 giây; Binance cùng tài sản vẫn đúng (S3) | `finobs:raw.coinbase.trade` |
 | [`S100_control_market_burst.yaml`](S100_control_market_burst.yaml) | Đối chứng | `FT09_value_anomaly` ở cấp scenario (nhãn kiểm tra báo nhầm) | Phát lại dữ liệu không chủ động tiêm lỗi | `is_incident: false`; không có root cause |
 
 Các kịch bản lỗi mô tả **nguyên nhân được chủ động giả lập**, không khẳng định nguyên nhân thực tế của các hiện tượng từng quan sát. S100 chỉ đánh giá báo nhầm trong phạm vi **volume/distribution** được khai báo; dữ liệu nền có một số trade Coinbase trùng nên không dùng S100 để kết luận false-positive rate cho mọi loại lỗi.
@@ -157,7 +159,7 @@ Không tự nhận một tên `injector` mới hoặc một metric `proposed` l�
 
 ## 7. Giới hạn của bộ kịch bản Sprint 2
 
-- Ba YAML S001–S003 và đối chứng S100 là **đặc tả kịch bản**; kiểm thử schema/semantic không tương đương với chạy injector end-to-end.
+- Năm YAML S001–S005 và đối chứng S100 là **đặc tả kịch bản**. Từ Sprint 3, [injector v1](../injector/README.md) phát lại và tiêm lỗi đúng theo YAML (tất định theo seed); chạy detector/RCA end-to-end trên kết quả tiêm là việc của S4.
 - Đường dẫn `data/raw/...` tham chiếu dữ liệu replay, có thể không được đóng gói trong repository.
 - Các ID asset như `finobs:raw.*`, `finobs:bronze.*` và `finobs:host.*` là định danh trong đặc tả; schema chỉ kiểm tra cú pháp, không xác nhận chúng tương đương với node runtime cụ thể.
 - Metric `proposed` chưa được mặc nhiên tính vào metric đã triển khai; hướng thay đổi của tín hiệu là dự kiến thiết kế.
