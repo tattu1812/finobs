@@ -66,14 +66,14 @@ ground_truth:
   end_offset_s: 300
 
   root_cause:
-    asset: "finobs:raw.binance_trades"
+    asset: "finobs:raw.binance.trade"
     component: "raw-data mutation"
     explanation: >
       Co tinh gan null cho truong price cua
       mot phan giao dich trong pham vi tiem loi.
 
   affected_assets:
-    - "finobs:raw.binance_trades"
+    - "finobs:raw.binance.trade"
 
   expected_signals:
     - metric: price_null_ratio_1m
@@ -166,8 +166,8 @@ Root-cause asset không nhất thiết trùng với tất cả affected assets.
 
 Ví dụ FT06 Clock Skew:
 
-- Root-cause asset: `finobs:host.collector`.
-- Affected assets: `finobs:raw.binance_trades`, `finobs:raw.coinbase_trades`.
+- Root-cause asset: `finobs:host.producer`.
+- Affected assets: `finobs:raw.binance.trade`, `finobs:raw.coinbase.trade`.
 - Observed metric: `negative_delay_ratio_1m`.
 
 Việc metric của cả hai nguồn bất thường không đủ để kết luận cả hai nguồn đều là nguyên nhân gốc.
@@ -180,10 +180,10 @@ Các asset trong YAML sử dụng định dạng:
 
 Ví dụ:
 
-- `finobs:raw.binance_trades`
-- `finobs:raw.coinbase_trades`
-- `finobs:bronze.trades`
-- `finobs:host.collector`
+- `finobs:raw.binance.trade`
+- `finobs:raw.coinbase.trade`
+- `finobs:bronze.trades_raw`
+- `finobs:host.producer`
 
 Định dạng này được sử dụng thống nhất trong Ground Truth và các scenario hiện có.
 
@@ -201,8 +201,8 @@ Khi so sánh Ground Truth với kết quả RCA:
 
 Ví dụ hai cách biểu diễn có thể cần chuẩn hóa:
 
-- `finobs:raw.binance_trades`
-- `dataset:finobs:raw.binance_trades`
+- `finobs:raw.binance.trade`
+- `dataset:finobs:raw.binance.trade`
 
 Chỉ được coi chúng tương đương khi quy tắc ánh xạ xác định cả hai cùng đại diện cho một asset.
 
@@ -394,15 +394,15 @@ AC@k ở đây được định nghĩa cho độ chính xác của **root-cause 
 
 Ground Truth:
 
-`finobs:host.collector`
+`finobs:host.producer`
 
 Kết quả RCA:
 
 | Rank | Asset |
 |---|---|
-| 1 | `finobs:raw.binance_trades` |
-| 2 | `finobs:host.collector` |
-| 3 | `finobs:raw.coinbase_trades` |
+| 1 | `finobs:raw.binance.trade` |
+| 2 | `finobs:host.producer` |
+| 3 | `finobs:raw.coinbase.trade` |
 
 Kết quả:
 
@@ -415,16 +415,16 @@ Kết quả:
 
 | Scenario | Incident | Fault Type | Root-cause asset |
 |---|---|---|---|
-| S001 – Coinbase Duplicate Burst | true | `FT03_duplicate_events` | `finobs:raw.coinbase_trades` |
-| S002 – Binance Schema Drift | true | `FT07_schema_drift` | `finobs:raw.binance_trades` |
-| S003 – Collector Clock Skew | true | `FT06_clock_skew` | `finobs:host.collector` |
+| S001 – Coinbase Duplicate Burst | true | `FT03_duplicate_events` | `finobs:raw.coinbase.trade` |
+| S002 – Binance Schema Drift | true | `FT07_schema_drift` | `finobs:raw.binance.trade` |
+| S003 – Collector Clock Skew | true | `FT06_clock_skew` | `finobs:host.producer` |
 | S100 – Control Market Burst | false | Không có Ground Truth sự cố | Không có |
 
 ### 9.2. S001 – Coinbase Duplicate Burst
 
 - Cơ chế: nhân bản 5% trade Coinbase, giữ nguyên event ID.
 - Khoảng sự cố: offset 600–720 giây.
-- Root-cause asset: `finobs:raw.coinbase_trades`.
+- Root-cause asset: `finobs:raw.coinbase.trade`.
 - Affected assets: raw Coinbase và bronze trades.
 - Expected signal: `duplicate_ratio_1m`.
 - Trạng thái metric: `proposed`.
@@ -436,7 +436,7 @@ Nhãn chính là FT03 vì cơ chế được tiêm là nhân bản event.
 
 - Cơ chế: đổi tên trường giá và thay đổi kiểu trade ID trong payload.
 - Khoảng sự cố: offset 300–1200 giây.
-- Root-cause asset: `finobs:raw.binance_trades`.
+- Root-cause asset: `finobs:raw.binance.trade`.
 - Affected assets: raw Binance và bronze trades.
 - Expected signals: `contract_violation_rate_1m`, `contract_violation_count_1m`.
 - Must-not-alert: contract violation của Coinbase.
@@ -447,7 +447,7 @@ Nhãn chính là FT07 do thay đổi payload không tương thích với contrac
 
 - Cơ chế: dịch `ingest_time` đi -500 ms.
 - Khoảng sự cố: offset 600–1200 giây.
-- Root-cause asset: `finobs:host.collector`.
+- Root-cause asset: `finobs:host.producer`.
 - Affected assets: raw Binance và raw Coinbase.
 - Expected signals: `ingest_delay_p95_ms`, `negative_delay_ratio_1m`.
 - Must-not-alert: `trade_count_1m`.

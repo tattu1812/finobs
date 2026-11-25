@@ -1,5 +1,5 @@
 # Kịch bản giả lập vi phạm payload contract của Binance; không khẳng định sàn đã thay đổi API thực tế.
-scenario_version: 1
+scenario_version: 2
 id: S002_binance_schema_drift
 title: Mô phỏng drift trade id và tên trường giá trên đầu vào Binance ETHUSDT
 fault_type: FT07_schema_drift
@@ -24,7 +24,7 @@ injection:
   injector: mutate_payload
   target:
     layer: source
-    asset: "finobs:raw.binance_trades"
+    asset: "finobs:raw.binance.trade"
     source: binance
     symbols: [ETHUSDT]
   start_offset_s: 300          # 03:05:00
@@ -38,15 +38,15 @@ ground_truth:
   start_offset_s: 300
   end_offset_s: 1200
   root_cause:
-    asset: "finobs:raw.binance_trades"
+    asset: "finobs:raw.binance.trade"
     component: điểm tiêm mutate_payload ở luồng đầu vào Binance ETHUSDT
     explanation: >
       Benchmark chủ động đổi cấu trúc payload, khiến bản ghi không khớp
       binance_trade.schema.json (thiếu "p", sai kiểu "t"). BTCUSDT không bị
       thay đổi. Đây là lỗi payload được tiêm, không phải sự kiện API thực tế.
   affected_assets:
-    - "finobs:raw.binance_trades"
-    - "finobs:bronze.trades"
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
   expected_signals:
     - metric: contract_violation_rate_1m
       group: { source: binance }

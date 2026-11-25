@@ -1,5 +1,5 @@
 # Đối chứng cho tín hiệu volume/distribution; không dùng để chấm lỗi duplicate ngoài phạm vi.
-scenario_version: 1
+scenario_version: 2
 id: S100_control_market_burst
 title: "Đối chứng: đỉnh tải thật lúc 02:57:01 ở cả hai sàn"
 fault_type: FT09_value_anomaly    # loại lỗi được kiểm tra báo nhầm, không phải sự cố có Ground Truth
