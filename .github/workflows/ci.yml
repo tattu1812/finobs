@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, tu, tattu/3-iceberg-trino, tattu/6-airflow-marquez, tattu/s2-helm-chart]
+    branches: [main]
 
 jobs:
   lint-and-validate:
@@ -39,11 +39,15 @@ jobs:
       - name: Test agent tools (fake data + Marquez client)
         run: make test-agent PY=python
 
+      - name: Test observability collectors
+        run: make test-observability PY=python
+
       - name: Prepare environment
         run: cp .env.example .env
 
       - name: Validate Docker Compose
         run: docker compose --env-file .env -f infra/docker-compose.yml config --quiet
+
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:

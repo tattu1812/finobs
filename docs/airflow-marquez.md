@@ -42,7 +42,7 @@ docker compose --env-file .env -f infra/docker-compose.yml ps
 
 ## 4. Khởi tạo Airflow
 
-Ở lần triển khai đầu tiên, chạy migration:
+Container `airflow-init` tự chạy migration khi `make up`, và webserver/scheduler chỉ khởi động sau khi bước này thành công. Lệnh dưới chỉ cần khi muốn chạy migration thủ công:
 
 ```bash
 docker compose --env-file .env -f infra/docker-compose.yml run --rm --entrypoint airflow airflow-init db migrate
