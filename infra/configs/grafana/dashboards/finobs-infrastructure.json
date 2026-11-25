@@ -337,8 +337,8 @@
     "list": []
   },
   "time": {
-    "from": "2026-10-24T13:11:30.519Z",
-    "to": "2026-10-24T13:41:30.519Z"
+    "from": "now-1h",
+    "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",

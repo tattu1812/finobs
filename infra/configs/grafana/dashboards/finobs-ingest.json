@@ -1,0 +1,348 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tuổi bản ghi mới nhất",
+      "description": "Giây kể từ bản ghi gần nhất producer nhận, theo nguồn (alert SourceStale > 120 s).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "time() - finobs_producer_last_ingest_timestamp_seconds",
+          "legendFormat": "{{source}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Vi phạm contract (1 giờ)",
+      "description": "Bản ghi vào raw.dlq trong 1 giờ qua.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (source) (increase(finobs_producer_records_total{result=\"invalid\"}[1h]))",
+          "legendFormat": "{{source}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Lệch đồng hồ producer",
+      "description": "Lệch so với NTP; dương = máy chậm. Quá ±250 ms thì số đo độ trễ sai (alert ClockSkew).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 250
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "finobs_producer_clock_offset_ms",
+          "legendFormat": "NTP"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Bản ghi / giây theo nguồn",
+      "description": "Tốc độ bản ghi producer gửi vào Kafka, tách hợp lệ và vi phạm contract.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (source) (rate(finobs_producer_records_total{result=\"valid\"}[1m]))",
+          "legendFormat": "{{source}} hợp lệ"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "B",
+          "expr": "sum by (source) (rate(finobs_producer_records_total{result=\"invalid\"}[1m]))",
+          "legendFormat": "{{source}} vi phạm"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Sự kiện kết nối WebSocket",
+      "description": "Số lần connected / disconnected / idle_timeout trong 5 phút; reconnect nhiều = nguồn chập chờn.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (source, kind) (increase(finobs_producer_ws_events_total[5m]))",
+          "legendFormat": "{{source}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Lệch đồng hồ theo thời gian",
+      "description": "Đồng hồ máy ảo Docker có thể trôi; đường này giải thích độ trễ âm trong metric ingest_delay_p95_ms.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "finobs-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "finobs-prometheus"
+          },
+          "refId": "A",
+          "expr": "finobs_producer_clock_offset_ms",
+          "legendFormat": "offset NTP"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+    "finobs",
+    "ingest"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "utc",
+  "title": "FinObs - Ingest (producer)",
+  "uid": "finobs-ingest",
+  "version": 1
+}
