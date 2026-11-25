@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main,tu, tattu/3-iceberg-trino]
+    branches: [main, tu, tattu/3-iceberg-trino, tattu/6-airflow-marquez, tattu/s2-helm-chart]
 
 jobs:
   lint-and-validate:
@@ -25,8 +25,32 @@ jobs:
       - name: Lint Python files
         run: ruff check .
 
+      - name: Install contract validator
+        run: pip install jsonschema==4.26.0
+
+      - name: Validate data contracts (fixtures)
+        run: make validate-contracts PY=python VALIDATE_IN=tests/fixtures/raw
+
+      - name: Validate evaluation scenarios
+        run: |
+          pip install pyyaml==6.0.2
+          make validate-scenarios PY=python
+
+      - name: Test agent tools (fake data + Marquez client)
+        run: make test-agent PY=python
+
       - name: Prepare environment
         run: cp .env.example .env
 
       - name: Validate Docker Compose
         run: docker compose --env-file .env -f infra/docker-compose.yml config --quiet
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.22.1
+
+      - name: Lint Helm chart
+        run: helm lint infra/helm/finobs
+
+      - name: Render Helm templates
+        run: helm template finobs infra/helm/finobs

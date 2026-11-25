@@ -1,0 +1,42 @@
+{{- if .Values.trino.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "finobs.fullname" . }}-trino
+  labels:
+    {{- include "finobs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: trino
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "finobs.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: trino
+  template:
+    metadata:
+      labels:
+        {{- include "finobs.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: trino
+    spec:
+      containers:
+        - name: trino
+          image: "{{ .Values.trino.image.repository }}:{{ .Values.trino.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.trino.service.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /v1/info
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+{{- end }}
