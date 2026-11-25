@@ -1,0 +1,22 @@
+groups:
+  - name: finobs-spark-alerts
+    rules:
+      - alert: SparkMasterDown
+        expr: up{job="spark-master"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: spark-master
+        annotations:
+          summary: "Spark Master is down"
+          description: "Prometheus cannot scrape Spark Master for more than 1 minute."
+
+      - alert: SparkWorkerDown
+        expr: up{job="spark-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: spark-worker
+        annotations:
+          summary: "Spark Worker is down"
+          description: "Prometheus cannot scrape Spark Worker for more than 1 minute."
