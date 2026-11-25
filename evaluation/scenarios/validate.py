@@ -1,5 +1,10 @@
 """
-Kiểm tra các file kịch bản lỗi (*.yaml) theo scenario.schema.json.
+Kiểm tra các file kịch bản lỗi (*.yaml) theo schema của đúng phiên bản khai báo.
+
+Phiên bản hợp đồng (quyết định D01 = C, Sprint 2):
+  scenario_version: 1 -> scenario.v1.schema.json  (đóng băng, đúng như main tại 6ae2034)
+  scenario_version: 2 -> scenario.schema.json     (hiện hành: chặt hơn, có FT12)
+Xem MIGRATION_v1_to_v2.md.
 
     python evaluation/scenarios/validate.py                       # mọi kịch bản trong thư mục này
     python evaluation/scenarios/validate.py --in tests/fixtures/scenarios_invalid --expect-invalid
@@ -11,7 +16,8 @@ Ngoài schema còn các kiểm tra liên trường mà JSON Schema không diễn
   - ground_truth.fault_type == fault_type
   - is_incident = false  <=>  injection = null
   - ground truth không bắt đầu trước khi tiêm lỗi
-Và một kiểm tra đồng bộ: mã FTxx trong evaluation/fault_taxonomy.md khớp đúng enum của schema.
+Và một kiểm tra đồng bộ: mã FTxx trong evaluation/fault_taxonomy.md khớp đúng enum của
+schema hiện hành (version 1 đóng băng ở FT01–FT11 nên không đối chiếu).
 
 Exit 0 khi mọi file hợp lệ. Với --expect-invalid: exit 0 chỉ khi MỌI file đều bị bắt lỗi.
 """
@@ -29,7 +35,9 @@ import yaml
 from jsonschema import Draft202012Validator
 
 HERE = Path(__file__).resolve().parent
-SCHEMA_PATH = HERE / "scenario.schema.json"
+SCHEMA_PATH = HERE / "scenario.schema.json"  # phiên bản hiện hành
+SCHEMA_PATHS = {1: HERE / "scenario.v1.schema.json", 2: SCHEMA_PATH}
+LATEST_VERSION = max(SCHEMA_PATHS)
 TAXONOMY_PATH = HERE.parent / "fault_taxonomy.md"
 FAULT_RE = re.compile(r"`(FT[0-9]{2}_[a-z_]+)`")
 
@@ -79,11 +87,28 @@ def taxonomy_errors(schema: dict) -> list[str]:
     return errors
 
 
-def check_file(path: Path, validator: Draft202012Validator) -> list[str]:
+def load_validators() -> dict[int, Draft202012Validator]:
+    validators = {}
+    for version, path in SCHEMA_PATHS.items():
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        validators[version] = Draft202012Validator(schema)
+    return validators
+
+
+def check_file(path: Path, validator) -> list[str]:
+    """validator: một Draft202012Validator (kiểm theo đúng schema đó) hoặc
+    dict {version: validator} từ load_validators() (chọn theo scenario_version)."""
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         return [f"YAML lỗi: {exc}"]
+    if isinstance(validator, dict):
+        version = doc.get("scenario_version") if isinstance(doc, dict) else None
+        if version not in validator:
+            supported = ", ".join(map(str, sorted(validator)))
+            return [f"scenario_version: {version!r} không được hỗ trợ (hỗ trợ: {supported})"]
+        validator = validator[version]
     errors = [
         f"{'/'.join(map(str, e.absolute_path)) or '<gốc>'}: {e.message}"
         for e in sorted(validator.iter_errors(doc), key=lambda e: list(map(str, e.absolute_path)))
@@ -107,8 +132,7 @@ def main() -> int:
     args = ap.parse_args()
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-    Draft202012Validator.check_schema(schema)
-    validator = Draft202012Validator(schema)
+    validators = load_validators()
 
     status = 0
     sync = taxonomy_errors(schema)
@@ -124,7 +148,7 @@ def main() -> int:
 
     bad = 0
     for path in files:
-        errors = check_file(path, validator)
+        errors = check_file(path, validators)
         if errors:
             bad += 1
             mark = "OK (bị bắt đúng)" if args.expect_invalid else "LỖI"

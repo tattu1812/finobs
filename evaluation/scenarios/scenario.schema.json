@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/tattu1812/finobs/main/evaluation/scenarios/scenario.schema.json",
-  "title": "FinObs evaluation scenario – Sprint 2, schema version 1",
-  "description": "Cấu trúc chung của một scenario tiêm lỗi hoặc đối chứng; mỗi scenario sự cố có một fault_type chính theo cơ chế tiêm. Ground truth chỉ dành cho evaluation harness, không được cung cấp cho detector/RCA agent. Phiên bản 1 kế thừa khung khanhsprint1 (6258641) và thêm FT12 Null Spike.",
+  "title": "FinObs evaluation scenario – schema version 2",
+  "description": "Cấu trúc chung của một scenario tiêm lỗi hoặc đối chứng; mỗi scenario sự cố có một fault_type chính theo cơ chế tiêm. Ground truth chỉ dành cho evaluation harness, không được cung cấp cho detector/RCA agent. Phiên bản 2 (Sprint 2, quyết định D01 = C): chặt hơn version 1 ở 16 điểm và thêm FT12 Null Spike. Version 1 vẫn được hỗ trợ qua scenario.v1.schema.json; xem MIGRATION_v1_to_v2.md.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,8 +18,8 @@
   ],
   "properties": {
     "scenario_version": {
-      "const": 1,
-      "description": "Phiên bản cấu trúc hiện hành; giữ 1 do các file hiện có vẫn tương thích."
+      "const": 2,
+      "description": "Phiên bản hợp đồng. Version 1 được kiểm bằng scenario.v1.schema.json; validator chọn schema theo trường này."
     },
     "id": {
       "type": "string",
@@ -492,7 +492,7 @@
     "asset": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$",
-      "description": "Asset ID dạng <namespace>:<name>, ví dụ finobs:raw.coinbase_trades. Không xác minh tài nguyên thực tồn tại."
+      "description": "Asset ID dạng <namespace>:<name>, ví dụ finobs:raw.coinbase.trade. Không xác minh tài nguyên thực tồn tại."
     },
     "metric_name": {
       "type": "string",
