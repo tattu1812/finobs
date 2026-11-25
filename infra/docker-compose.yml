@@ -1,4 +1,101 @@
 services:
+  marquez-api:
+    image: marquezproject/marquez:0.50.0
+    container_name: finobs-marquez-api
+    depends_on:
+      marquez-postgres:
+        condition: service_healthy
+    environment:
+      MARQUEZ_CONFIG: /usr/src/app/marquez.finobs.yml
+      MARQUEZ_DB_PASSWORD: ${MARQUEZ_DB_PASSWORD}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./configs/marquez/marquez.yml:/usr/src/app/marquez.finobs.yml:ro
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  marquez-postgres:
+    image: postgres:16
+    container_name: finobs-marquez-postgres
+    environment:
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: ${MARQUEZ_DB_PASSWORD}
+      POSTGRES_DB: marquez
+    volumes:
+      - marquez_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marquez -d marquez"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-postgres:
+    image: postgres:16
+    container_name: finobs-airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finobs-network
+  airflow-webserver:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-webserver
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: webserver
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-scheduler:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-scheduler
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+    command: scheduler
+    restart: unless-stopped
+    networks:
+      - finobs-network
+  airflow-init:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: finobs-airflow-init
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    command: db migrate
+    restart: "no"
+    networks:
+      - finobs-network
   kafka:
     image: apache/kafka:3.9.1
     hostname: kafka
@@ -50,6 +147,58 @@ services:
     ports:
       - "7077:7077"
       - "${SPARK_UI_PORT:-8080}:8080"
+    volumes:
+      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+    networks:
+      - finobs-network
+  iceberg-init:
+    image: alpine:3.20
+    container_name: finobs-iceberg-init
+    user: root
+    command: ["sh", "-c", "chown -R 1000:1000 /var/lib/iceberg"]
+    volumes:
+      - iceberg_catalog_data:/var/lib/iceberg
+    restart: "no"
+    networks:
+      - finobs-network
+
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: finobs-iceberg-rest
+    depends_on:
+      minio:
+        condition: service_started
+      iceberg-init:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://finobs-warehouse/
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_URI: jdbc:sqlite:/var/lib/iceberg/catalog.db
+    volumes:
+      - iceberg_catalog_data:/var/lib/iceberg
+    networks:
+      - finobs-network
+
+  trino:
+    image: trinodb/trino:477
+    container_name: finobs-trino
+    depends_on:
+      - iceberg-rest
+    ports:
+      - "8081:8080"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./configs/trino/catalog/iceberg.properties:/etc/trino/catalog/iceberg.properties:ro
     networks:
       - finobs-network
 
@@ -64,13 +213,48 @@ services:
       --memory 1G
     depends_on:
       - spark-master
+    volumes:
+      - ./configs/spark/metrics.properties:/opt/spark/conf/metrics.properties:ro
+    networks:
+      - finobs-network
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: finobs-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    networks:
+      - finobs-network
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: finobs-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
     networks:
       - finobs-network
 
 volumes:
   kafka_data:
   minio_data:
-
+  iceberg_catalog_data:
+  airflow_postgres_data:
+  marquez_postgres_data:
+  prometheus_data:
+  grafana_data:
 networks:
   finobs-network:
     driver: bridge
