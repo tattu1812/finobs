@@ -41,7 +41,7 @@ python observability/collectors/trade_count.py --in data/raw --window-end 2026-1
 
 ## Giới hạn đã biết
 
-- Bộ nhớ khử trùng của vòng liên tục giữ `event_id` trong 65 phút gần nhất. Trade Coinbase phát lại
+- Bộ nhớ khử trùng của vòng liên tục giữ `event_id` trong 15 phút gần nhất (S3: 3 sàn x 65 phút từng tốn ~400 MB). Trade Coinbase phát lại
   cũ hơn mốc đó (Sprint 1 thấy tới 19,7 giờ) vẫn bị tính là trade mới.
 - Độ trễ phụ thuộc đồng hồ máy chạy producer. Xem metric `finobs_producer_clock_offset_ms` và alert
   `ClockSkew` trước khi tin vào `ingest_delay_p95_ms`.
