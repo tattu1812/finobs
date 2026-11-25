@@ -1,5 +1,5 @@
 # FinObs Helm chart - Sprint 2 draft
-# Cau hinh phac thao, chua san sang trien khai production.
+# Cấu hình phác thảo, chưa sẵn sàng triển khai production.
 
 global:
   environment: dev
