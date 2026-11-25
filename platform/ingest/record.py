@@ -18,6 +18,7 @@ from pathlib import Path
 
 import binance_ws
 import coinbase_ws
+import kraken_ws
 import vnstock_poll
 from common import OpsLog, RawWriter
 
@@ -65,6 +66,7 @@ async def main() -> None:
     runners = {
         "binance": binance_ws.run,
         "coinbase": coinbase_ws.run,
+        "kraken": kraken_ws.run,
         "vnstock": vnstock_poll.run,  # ngoài giờ HOSE thì tự kết thúc, nguồn khác vẫn chạy
     }
 
