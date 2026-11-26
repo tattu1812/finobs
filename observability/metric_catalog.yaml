@@ -167,3 +167,63 @@ metrics:
     when_either_source_missing: null
     when_any_price_is_zero: null
     status: needs_pair_mapping_and_baseline
+
+  - name: trade_id_gap_count
+    pillar: completeness
+    description: "Số khoảng hở trade ID riêng biệt trong cửa sổ kiểm tra."
+    group_by: [source, symbol]
+    required_fields: [event_id, ingest_time]
+    formula: "count(distinct contiguous missing trade_id intervals)"
+    unit: gaps
+
+  - name: trade_id_gap_missing_total
+    pillar: completeness
+    description: "Tổng số trade ID bị thiếu qua tất cả khoảng hở trong cửa sổ."
+    group_by: [source, symbol]
+    required_fields: [event_id, ingest_time]
+    formula: "sum(gap_end - gap_start + 1)"
+    unit: trades
+
+  - name: trade_id_duplicate_count
+    pillar: completeness
+    description: "Số trade ID xuất hiện nhiều hơn 1 lần trong cửa sổ."
+    group_by: [source, symbol]
+    required_fields: [event_id, ingest_time]
+    formula: "count(trade_id where occurrences > 1)"
+    unit: ids
+
+  - name: trade_id_out_of_order_count
+    pillar: completeness
+    description: "Số lần trade ID nhận sau nhỏ hơn trade ID nhận trước (theo ingest_ts)."
+    group_by: [source, symbol]
+    required_fields: [event_id, ingest_time]
+    formula: "count(i where trade_id[i] < trade_id[i-1])"
+    unit: events
+
+  - name: reconciliation_match_ratio
+    pillar: reconciliation
+    description: "Tỷ lệ trade khớp hoàn toàn giữa stream bronze và file chính thức Binance D+1."
+    group_by: [source, symbol, date]
+    formula: "matched_trades / official_trades"
+    unit: ratio
+
+  - name: reconciliation_missing_trades
+    pillar: reconciliation
+    description: "Số trade có trong file chính thức Binance nhưng thiếu trong stream bronze."
+    group_by: [source, symbol, date]
+    formula: "count(official_ids - stream_ids)"
+    unit: trades
+
+  - name: reconciliation_extra_trades
+    pillar: reconciliation
+    description: "Số trade có trong stream bronze nhưng không có trong file chính thức Binance."
+    group_by: [source, symbol, date]
+    formula: "count(stream_ids - official_ids)"
+    unit: trades
+
+  - name: reconciliation_value_mismatch
+    pillar: reconciliation
+    description: "Số trường (price, qty, time_ms) sai lệch vượt dung sai giữa stream và file chính thức."
+    group_by: [source, symbol, date]
+    formula: "count(mismatched fields among common trade_ids)"
+    unit: fields

@@ -433,6 +433,27 @@ services:
     networks:
       - finobs-network
 
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: finobs-alertmanager
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./configs/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - alertmanager_data:/alertmanager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/healthy > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - finobs-network
+
   grafana:
     image: grafana/grafana:11.6.0
     container_name: finobs-grafana
@@ -459,6 +480,7 @@ volumes:
   marquez_postgres_data:
   metrics_postgres_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
   raw_data:
   spark_checkpoints:

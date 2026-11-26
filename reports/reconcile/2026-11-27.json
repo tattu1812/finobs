@@ -1,0 +1,80 @@
+{
+  "report_date": "2026-11-27",
+  "run_at": "2026-11-26T10:56:56Z",
+  "code_version": "65725c8",
+  "is_partial_day": false,
+  "window_from": null,
+  "window_to": null,
+  "symbols": [
+    {
+      "symbol": "BTCUSDT",
+      "status": "MISSING_IN_STREAM",
+      "official_count": 6,
+      "stream_count": 4,
+      "matched": 4,
+      "match_ratio": 0.666667,
+      "missing_in_stream_count": 2,
+      "missing_in_stream": [
+        1002,
+        1003
+      ],
+      "extra_in_stream_count": 0,
+      "extra_in_stream": [],
+      "value_mismatch_count": 0,
+      "value_mismatches": [],
+      "detection_coverage": 1.0,
+      "gap_report": {
+        "source": "binance",
+        "symbol": "BTCUSDT",
+        "total_ids": 4,
+        "distinct_ids": 4,
+        "gap_count": 1,
+        "gap_missing_total": 2,
+        "gaps": [
+          {
+            "start": 1002,
+            "end": 1003,
+            "missing_count": 2
+          }
+        ],
+        "duplicate_count": 0,
+        "duplicates": [],
+        "out_of_order_count": 0
+      }
+    },
+    {
+      "symbol": "ETHUSDT",
+      "status": "VALUE_MISMATCH",
+      "official_count": 3,
+      "stream_count": 3,
+      "matched": 2,
+      "match_ratio": 0.666667,
+      "missing_in_stream_count": 0,
+      "missing_in_stream": [],
+      "extra_in_stream_count": 0,
+      "extra_in_stream": [],
+      "value_mismatch_count": 1,
+      "value_mismatches": [
+        {
+          "trade_id": 2001,
+          "field": "price",
+          "stream_value": "2310.60000000",
+          "official_value": "2310.65000000"
+        }
+      ],
+      "detection_coverage": 1.0,
+      "gap_report": {
+        "source": "binance",
+        "symbol": "ETHUSDT",
+        "total_ids": 3,
+        "distinct_ids": 3,
+        "gap_count": 0,
+        "gap_missing_total": 0,
+        "gaps": [],
+        "duplicate_count": 0,
+        "duplicates": [],
+        "out_of_order_count": 0
+      }
+    }
+  ]
+}
