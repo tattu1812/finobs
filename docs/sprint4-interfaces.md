@@ -83,3 +83,14 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Injector v2 (`evaluation/injector/injector_v2.py`)**: Hỗ trợ 8 loại lỗi (`FT01`, `FT02`, `FT03`, `FT05`, `FT06`, `FT07`, `FT09`, `FT12`), mặc định `dry_run=True`, topic tiêm thử có tiền tố `test.`.
 - **MTTD Harness (`evaluation/bench/mttd_harness.py`)**: Xuất kết quả benchmark ra `reports/bench/mttd_summary.{json,csv,md}`.
 - **Phân tách kịch bản**: Nhóm chỉnh tham số (*tuning*) tách khỏi nhóm đánh giá (*eval*) theo `evaluation/scenarios/benchmark_split.yaml`.
+
+---
+
+# Hợp đồng Giao tiếp — Sprint 5
+
+## PL (Sprint 5) — Công cụ phát lại (`infra/replay/replayer.py`)
+
+- **Namespace & Topic cách ly**: mặc định `namespace="replay"` (`dry_run=True`), topic đích `replay.<source>.trade`. Từ chối chạy (`ReplayNamespaceError`) nếu trùng `raw`, `bronze`, `silver`, `gold`, `live`, `prod`, `finobs`.
+- **Schema sự kiện đầu ra**: tuân theo `platform/contracts/raw_event.schema.json` (`1.0.0`); mã tổng hợp khi scale `10 → 100 → 500` đặt tên `SYNTH001USDT` / `SYNTH001-USDT` và gắn `transport.is_synthetic = true`.
+- **Cách EV/OB gọi**: `python infra/replay/replayer.py --in <dir_or_csv> --speed max --namespace replay --seed 42 --out <path.jsonl>` hoặc `make replay`.
+- **Metric báo cáo JSON**: `emitted_events`, `total_events`, `elapsed_seconds`, `throughput_eps`, `avg_detect_latency_ms`, `p95_detect_latency_ms`, `cpu_seconds`, `peak_ram_mb`, `progress_pct`, `synthetic_symbols`, `paused`.

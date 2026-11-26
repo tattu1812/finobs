@@ -280,6 +280,7 @@ Xem [observability/collectors/README.md](observability/collectors/README.md) và
 | `make bench` | Chạy injector trên các scenario |
 | `make load-official DATE=...` | Nạp file chính thức Binance của một ngày |
 | `make reconcile DATE=...` | Đối soát D+1 stream vs file chính thức Binance (`SYMBOLS`, `FROM`, `TO`, `FIXTURE_DIR`) |
+| `make replay IN=... SPEED=...` | Phát lại dữ liệu lịch sử vào namespace `replay.*` (khô/JSONL, không chạm dữ liệu thật) |
 | `make venv` | Tạo `.venv` và cài dependency cho ingest + test |
 | `make clock-check` / `record` / `analyze` | Đo đồng hồ, thu file, sinh bảng đo (Sprint 1) |
 | `make validate-contracts` / `validate-scenarios` | Validate data contract và scenario |
