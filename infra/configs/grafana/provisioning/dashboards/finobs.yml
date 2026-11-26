@@ -9,3 +9,11 @@ providers:
     editable: true
     options:
       path: /var/lib/grafana/dashboards
+  - name: FinObs Completeness Dashboards
+    orgId: 1
+    folder: FinObs
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards-de

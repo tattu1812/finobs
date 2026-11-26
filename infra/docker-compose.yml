@@ -568,6 +568,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../dashboards:/var/lib/grafana/dashboards-de:ro
     depends_on:
       - prometheus
     restart: unless-stopped

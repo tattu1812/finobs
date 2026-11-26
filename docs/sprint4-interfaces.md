@@ -94,3 +94,12 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Schema sự kiện đầu ra**: tuân theo `platform/contracts/raw_event.schema.json` (`1.0.0`); mã tổng hợp khi scale `10 → 100 → 500` đặt tên `SYNTH001USDT` / `SYNTH001-USDT` và gắn `transport.is_synthetic = true`.
 - **Cách EV/OB gọi**: `python infra/replay/replayer.py --in <dir_or_csv> --speed max --namespace replay --seed 42 --out <path.jsonl>` hoặc `make replay`.
 - **Metric báo cáo JSON**: `emitted_events`, `total_events`, `elapsed_seconds`, `throughput_eps`, `avg_detect_latency_ms`, `p95_detect_latency_ms`, `cpu_seconds`, `peak_ram_mb`, `progress_pct`, `synthetic_symbols`, `paused`.
+
+---
+
+## DE (Sprint 5) — Dashboard Stream Completeness & Backfill C2
+
+- **Dashboard Grafana**: `dashboards/finobs-stream-completeness.json` (`uid: finobs-stream-completeness`), tự động provision vào thư mục `FinObs`. Dùng biến `$source`, `$symbol` và recording rule `finobs:*` trên `trade_id_gap_count`, `trade_id_gap_missing_total`, `reconciliation_match_ratio`, `reconciliation_missing_trades`, `ingest_delay_p95_ms`.
+- **Backfill C2 (`observability/reconcile/backfill.py`)**: xuất `reports/reconcile/YYYY-MM-DD.{md,json}` và `coverage_summary.{md,json}`.
+- **Trạng thái ngày đối soát**: `OK`, `MISSING_IN_STREAM`, `EXTRA_IN_STREAM`, `VALUE_MISMATCH`, `INCOMPLETE_DAY` (ngày thu dở dang), `OFFICIAL_NOT_AVAILABLE` (chưa có file chính thức).
+- **Đo M3 (`observability/reconcile/measure_m3.py`)**: trả về `m3_gap_detect_latency_seconds` (< 60 s) và `m3_report_rate` (= 1.0).
