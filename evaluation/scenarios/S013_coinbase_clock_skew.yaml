@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S013_coinbase_clock_skew
+title: Coinbase BTC-USD lệch đồng hồ -3 giây trên host thu (FT06)
+fault_type: FT06_clock_skew
+severity: medium
+description: >
+  Mô phỏng lệch đồng hồ -3000ms ở ingest_time trên luồng Coinbase BTC-USD,
+  khiến ingest_time nhỏ hơn event_time.
+tags: [sprint5, coinbase, clock_skew]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [BTC-USD]
+  window:
+    start: "2026-10-27T11:00:00.000Z"
+    end: "2026-10-27T11:30:00.000Z"
+  seed: 13
+injection:
+  injector: skew_clock
+  target:
+    layer: host
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [BTC-USD]
+  start_offset_s: 300
+  duration_s: 180
+  params:
+    offset_ms: -3000
+ground_truth:
+  is_incident: true
+  fault_type: FT06_clock_skew
+  start_offset_s: 300
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: đồng hồ hệ thống container producer
+    explanation: >
+      Đồng hồ container bị lệch -3000ms dẫn tới độ trễ ingest âm bất thường.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: ingest_delay_p95_ms
+      group: { source: coinbase }
+      direction: shift
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S011_binance_late_out_of_order
+title: Binance BTCUSDT đến muộn và đảo thứ tự 5 giây (FT05)
+fault_type: FT05_late_out_of_order
+severity: medium
+description: >
+  Mô phỏng một nhóm bản ghi Binance BTCUSDT bị trễ ingest_time 5 giây
+  và sắp xếp đảo thứ tự khi vào Kafka/bronze.
+tags: [sprint5, binance, out_of_order]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T09:00:00.000Z"
+    end: "2026-10-27T09:30:00.000Z"
+  seed: 11
+injection:
+  injector: delay_events
+  target:
+    layer: kafka
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 180
+  params:
+    delay_ms: 5000
+ground_truth:
+  is_incident: true
+  fault_type: FT05_late_out_of_order
+  start_offset_s: 300
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: tầng vận chuyển Kafka partition Binance
+    explanation: >
+      Sự kiện bị trễ và đảo thứ tự theo ingest_time làm tăng trade_id_out_of_order_count.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_id_out_of_order_count
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

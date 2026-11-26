@@ -1,0 +1,53 @@
+scenario_version: 2
+id: S007_coinbase_stale_feed_ethusd
+title: Coinbase ETH-USD ngừng phát dữ liệu 5 phút (FT01)
+fault_type: FT01_stale_feed
+severity: critical
+description: >
+  Mô phỏng gián đoạn luồng Coinbase cho mã ETH-USD kéo dài 300 giây,
+  gây cạn kiệt error budget của SLO freshness và completeness trên Coinbase.
+tags: [sprint5, coinbase, stale_feed]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [ETH-USD]
+  window:
+    start: "2026-10-27T05:00:00.000Z"
+    end: "2026-10-27T05:30:00.000Z"
+  seed: 7
+injection:
+  injector: drop_window
+  target:
+    layer: source
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [ETH-USD]
+  start_offset_s: 240
+  duration_s: 300
+  params:
+    mode: full_stop
+ground_truth:
+  is_incident: true
+  fault_type: FT01_stale_feed
+  start_offset_s: 240
+  end_offset_s: 540
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: producer WebSocket Coinbase cho ETH-USD
+    explanation: >
+      Luồng Coinbase ETH-USD ngừng phát liên tục trong 300 giây do mô phỏng
+      đứt kết nối nguồn.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_count_1m
+      group: { source: coinbase }
+      direction: down
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

@@ -1,0 +1,22 @@
+# Danh sách các ngày biến động dùng để kiểm thử baseline cảnh báo giả (EV, Sprint 5)
+# Ghi chú: Dữ liệu thật 14 ngày đang thu trên VM từ 2026-11-26; các mốc dưới đây gồm
+# dữ liệu mô phỏng lịch sử (fixture) và khung ngày dự kiến đối chiếu sau khi đủ 14 ngày.
+
+selection_criteria:
+  price_range_pct_min: 5.0
+  volume_spike_multiplier: 2.5
+  description: "Chọn ngày có biên độ dao động giá >= 5% hoặc volume tăng >= 2.5x trung bình 7 ngày nhưng pipeline hoàn toàn khỏe mạnh."
+
+volatile_days:
+  - date: "2026-10-27"
+    source: "simulated_fixture"
+    reason: "Ngày kịch bản đối chứng S100_control_market_burst (đỉnh tải thật Coinbase 3x)"
+    is_preliminary: true
+  - date: "2026-11-12"
+    source: "simulated_fixture"
+    reason: "Mô phỏng biến động mạnh đa mã BTCUSDT/ETHUSDT (+/- 6.5% trong 30 phút)"
+    is_preliminary: true
+  - date: "2026-11-26"
+    source: "vm_collection_day1"
+    reason: "Ngày đầu tiên bật thu 14 ngày trên VM (partial day ~15h UTC+7)"
+    is_preliminary: true

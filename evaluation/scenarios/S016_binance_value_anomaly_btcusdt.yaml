@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S016_binance_value_anomaly_btcusdt
+title: Binance BTCUSDT nhân giá x1000 trong 2 phút (FT09)
+fault_type: FT09_value_anomaly
+severity: critical
+description: >
+  Mô phỏng lỗi đơn vị/scale làm giá BTCUSDT từ Binance bị nhân 1000 lần
+  trong 120 giây, tạo spike bất thường trên KLL price_sketch_p95.
+tags: [sprint5, binance, value_anomaly]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T14:00:00.000Z"
+    end: "2026-10-27T14:30:00.000Z"
+  seed: 16
+injection:
+  injector: scale_value
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 120
+  params:
+    multiplier: 1000
+ground_truth:
+  is_incident: true
+  fault_type: FT09_value_anomaly
+  start_offset_s: 300
+  end_offset_s: 420
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: bộ parse giá Binance BTCUSDT
+    explanation: >
+      Giá trị trường p bị nhân 1000 lần gây sai lệch phân vị giá và chênh lệch liên sàn.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:silver.trades"
+  expected_signals:
+    - metric: price_sketch_p95_1m
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

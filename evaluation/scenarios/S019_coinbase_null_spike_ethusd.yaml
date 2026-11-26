@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S019_coinbase_null_spike_ethusd
+title: Coinbase ETH-USD đột biến null ở trường price (FT12)
+fault_type: FT12_null_spike
+severity: high
+description: >
+  Mô phỏng trường price trên luồng Coinbase ETH-USD bị null hóa trong 3 phút,
+  kiểm tra khả năng phát hiện null spike của detector và contract check.
+tags: [sprint5, coinbase, null_spike]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [ETH-USD]
+  window:
+    start: "2026-10-27T17:00:00.000Z"
+    end: "2026-10-27T17:30:00.000Z"
+  seed: 19
+injection:
+  injector: inject_nulls
+  target:
+    layer: source
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [ETH-USD]
+  start_offset_s: 300
+  duration_s: 180
+  params:
+    field: price
+ground_truth:
+  is_incident: true
+  fault_type: FT12_null_spike
+  start_offset_s: 300
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: payload Coinbase ETH-USD
+    explanation: >
+      Trường price bị gán null liên tục trong 3 phút tại luồng Coinbase.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: contract_violation_rate
+      group: { source: coinbase }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

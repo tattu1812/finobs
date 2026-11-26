@@ -1,0 +1,27 @@
+scenario_version: 2
+id: S020_control_binance_normal_day
+title: Đối chứng Binance BTCUSDT ngày giao dịch bình thường (không sự cố)
+fault_type: FT09_value_anomaly
+severity: low
+description: >
+  Kịch bản đối chứng không tiêm lỗi trên luồng Binance BTCUSDT để đo tỷ lệ
+  cảnh báo giả (false positive) của các detector baseline.
+tags: [sprint5, control, binance]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T18:00:00.000Z"
+    end: "2026-10-27T18:30:00.000Z"
+  seed: 20
+injection: null
+ground_truth:
+  is_incident: false
+  must_not_alert:
+    - metric: price_sketch_p95_1m
+      group: { source: binance }
+      note: Dữ liệu bình thường không được phát cảnh báo
+evaluation:
+  metrics: [false_positive_count]

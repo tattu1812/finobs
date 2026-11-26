@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S012_coinbase_late_out_of_order
+title: Coinbase ETH-USD trễ batch 8 giây gây đảo thứ tự (FT05)
+fault_type: FT05_late_out_of_order
+severity: medium
+description: >
+  Mô phỏng sự kiện Coinbase ETH-USD bị đẩy lùi ingest_time 8 giây,
+  tạo đảo thứ tự giữa các batch nhận liên tiếp.
+tags: [sprint5, coinbase, out_of_order]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [ETH-USD]
+  window:
+    start: "2026-10-27T10:00:00.000Z"
+    end: "2026-10-27T10:30:00.000Z"
+  seed: 12
+injection:
+  injector: delay_events
+  target:
+    layer: kafka
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [ETH-USD]
+  start_offset_s: 360
+  duration_s: 180
+  params:
+    delay_ms: 8000
+ground_truth:
+  is_incident: true
+  fault_type: FT05_late_out_of_order
+  start_offset_s: 360
+  end_offset_s: 540
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: hàng đợi mạng trước bronze_trades
+    explanation: >
+      Độ trễ mạng 8 giây gây đảo thứ tự nhận bản ghi Coinbase ETH-USD.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_id_out_of_order_count
+      group: { source: coinbase }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

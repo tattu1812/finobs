@@ -1,0 +1,27 @@
+scenario_version: 2
+id: S021_control_coinbase_volatile_valid
+title: Đối chứng Coinbase BTC-USD biến động giá hợp lệ (không sự cố)
+fault_type: FT09_value_anomaly
+severity: low
+description: >
+  Kịch bản đối chứng mô phỏng biến động giá hợp lệ trên Coinbase BTC-USD
+  không tiêm lỗi, kiểm tra detector không báo giả trên ngày biến động.
+tags: [sprint5, control, coinbase, volatile_valid]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [BTC-USD]
+  window:
+    start: "2026-10-27T19:00:00.000Z"
+    end: "2026-10-27T19:30:00.000Z"
+  seed: 21
+injection: null
+ground_truth:
+  is_incident: false
+  must_not_alert:
+    - metric: price_sketch_p95_1m
+      group: { source: coinbase }
+      note: Biến động thị trường hợp lệ không được báo động
+evaluation:
+  metrics: [false_positive_count]

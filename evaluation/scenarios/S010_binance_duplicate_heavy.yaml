@@ -1,0 +1,53 @@
+scenario_version: 2
+id: S010_binance_duplicate_heavy
+title: Binance BTCUSDT nhân bản 40% bản ghi trong 3 phút (FT03)
+fault_type: FT03_duplicate_events
+severity: high
+description: >
+  Mô phỏng lặp lại 40% bản ghi trên Binance BTCUSDT trong 180 giây,
+  kiểm tra khả năng phát hiện tỷ lệ trùng lặp tăng cao ở tầng raw/bronze.
+tags: [sprint5, binance, dedup]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T08:00:00.000Z"
+    end: "2026-10-27T08:30:00.000Z"
+  seed: 10
+injection:
+  injector: duplicate_records
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 180
+  params:
+    fraction: 0.4
+    keep_event_id: true
+ground_truth:
+  is_incident: true
+  fault_type: FT03_duplicate_events
+  start_offset_s: 300
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: producer Binance BTCUSDT
+    explanation: >
+      Lặp lại 40% thông điệp giữ nguyên event_id, làm tăng vọt trade_id_duplicate_count.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_id_duplicate_count
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

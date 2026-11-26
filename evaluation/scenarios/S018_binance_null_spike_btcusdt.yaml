@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S018_binance_null_spike_btcusdt
+title: Binance BTCUSDT đột biến giá trị null ở trường giá (FT12)
+fault_type: FT12_null_spike
+severity: critical
+description: >
+  Mô phỏng trường p của Binance BTCUSDT đồng loạt nhận giá trị null trong 2 phút,
+  vi phạm data contract và làm hỏng các phép tính thống kê.
+tags: [sprint5, binance, null_spike]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T16:00:00.000Z"
+    end: "2026-10-27T16:30:00.000Z"
+  seed: 18
+injection:
+  injector: inject_nulls
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 120
+  params:
+    field: p
+ground_truth:
+  is_incident: true
+  fault_type: FT12_null_spike
+  start_offset_s: 300
+  end_offset_s: 420
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: payload Binance BTCUSDT
+    explanation: >
+      Trường giá p nhận giá trị null liên tiếp trong cửa sổ tiêm lỗi.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: contract_violation_rate
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

@@ -1,9 +1,27 @@
 # Tách tập kịch bản dùng để chỉnh tham số (tuning) khỏi tập đánh giá (eval)
-# để tránh overfitting / benchmark "đẹp giả" (EV-A, Sprint 4).
+# để tránh overfitting / benchmark "đẹp giả" (EV-A, Sprint 4 & Sprint 5).
 tuning:
   - S001_coinbase_duplicate_burst
   - S003_collector_clock_skew
+  - S004_binance_volume_loss
+  - S006_binance_stale_feed_btcusdt
+  - S008_coinbase_volume_loss_btcusd
+  - S011_binance_late_out_of_order
+  - S013_coinbase_clock_skew
+  - S015_coinbase_schema_drift_price
+  - S016_binance_value_anomaly_btcusdt
+  - S018_binance_null_spike_btcusdt
+  - S020_control_binance_normal_day
 
 eval:
   - S002_binance_schema_drift
+  - S005_coinbase_price_unit
+  - S007_coinbase_stale_feed_ethusd
+  - S009_binance_volume_loss_light
+  - S010_binance_duplicate_heavy
+  - S012_coinbase_late_out_of_order
+  - S014_binance_clock_skew_host
+  - S017_binance_value_anomaly_ethusdt
+  - S019_coinbase_null_spike_ethusd
+  - S021_control_coinbase_volatile_valid
   - S100_control_market_burst

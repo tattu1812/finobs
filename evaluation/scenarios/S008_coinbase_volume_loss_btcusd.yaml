@@ -1,0 +1,53 @@
+scenario_version: 2
+id: S008_coinbase_volume_loss_btcusd
+title: Coinbase BTC-USD rơi 30% bản ghi gây hở trade_id (FT02)
+fault_type: FT02_volume_loss
+severity: high
+description: >
+  Mô phỏng mất 30% thông điệp ở luồng Coinbase BTC-USD trong 4 phút,
+  tạo ra nhiều khoảng hở liên tiếp trên chuỗi trade_id.
+tags: [sprint5, coinbase, volume_loss]
+input:
+  mode: replay
+  dataset: data/raw/coinbase/2026-10-27
+  sources: [coinbase]
+  symbols: [BTC-USD]
+  window:
+    start: "2026-10-27T06:00:00.000Z"
+    end: "2026-10-27T06:30:00.000Z"
+  seed: 8
+injection:
+  injector: drop_fraction
+  target:
+    layer: source
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [BTC-USD]
+  start_offset_s: 300
+  duration_s: 240
+  params:
+    fraction: 0.3
+ground_truth:
+  is_incident: true
+  fault_type: FT02_volume_loss
+  start_offset_s: 300
+  end_offset_s: 540
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: lớp thu thập Coinbase BTC-USD
+    explanation: >
+      Rơi ngẫu nhiên 30% sự kiện trade làm xuất hiện khoảng hở trade_id
+      tại tầng bronze.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_id_gap_count
+      group: { source: coinbase }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]
