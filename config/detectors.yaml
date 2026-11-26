@@ -1,0 +1,16 @@
+# Cấu hình mặc định cho các detector baseline (OB, Sprint 5)
+# Tham số dùng chung, không tinh chỉnh quá khớp (overfit) vào tập eval.
+
+zscore_single:
+  window: 30
+  threshold: 3.5
+  min_samples: 10
+  robust_mad: true
+  min_scale: 1.0e-6
+
+historical_bounds:
+  lower_quantile: 0.01
+  upper_quantile: 0.99
+  margin_factor: 0.25
+  min_fit_samples: 10
+  kll_k: 200
