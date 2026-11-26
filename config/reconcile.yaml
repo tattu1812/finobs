@@ -1,0 +1,14 @@
+# Dung sai đối soát D+1 stream vs file chính thức Binance.
+# Giá trị cấu hình, không hardcode trong code.
+
+# Giá (Decimal): Binance gửi đúng 8 chữ số → phải khớp tuyệt đối
+price_tolerance: "0"
+
+# Khối lượng (Decimal): khớp tuyệt đối
+qty_tolerance: "0"
+
+# Thời gian (ms): cho phép lệch tới 1 giây giữa event_ts (stream, lấy từ
+# payload.T = trade time epoch ms) và trade_ts (file chính thức, cột time).
+# Lý do: event_time trong envelope lấy từ payload.T và chuyển sang ISO ms —
+# quá trình parse có thể làm tròn micro giây → ms.
+time_tolerance_ms: 1000

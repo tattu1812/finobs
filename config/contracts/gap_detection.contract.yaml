@@ -1,0 +1,46 @@
+name: gap_detection_report
+version: "1.0.0"
+description: >
+  Kết quả phát hiện khoảng hở trade ID (DE-A, Sprint 4).
+  Áp dụng cho cả Binance và Coinbase.
+
+columns:
+  - name: source
+    type: string
+    description: "Nguồn dữ liệu: binance, coinbase"
+  - name: symbol
+    type: string
+    description: "Mã gốc (symbol_native)"
+  - name: window_start
+    type: timestamp
+    description: "Bắt đầu cửa sổ kiểm tra (UTC, ISO 8601)"
+  - name: window_end
+    type: timestamp
+    description: "Kết thúc cửa sổ kiểm tra (UTC, ISO 8601)"
+  - name: total_ids
+    type: integer
+    description: "Tổng số trade ID thu được (kể cả trùng)"
+  - name: distinct_ids
+    type: integer
+    description: "Số trade ID duy nhất"
+  - name: gap_count
+    type: integer
+    description: "Số khoảng hở (mỗi khoảng hở là dãy ID liên tiếp bị thiếu)"
+  - name: gap_missing_total
+    type: integer
+    description: "Tổng số ID bị thiếu trong tất cả khoảng hở"
+  - name: gaps
+    type: array
+    description: "Danh sách khoảng hở: [{start, end, missing_count}]. Rút gọn nếu quá 100."
+  - name: duplicate_count
+    type: integer
+    description: "Số ID xuất hiện nhiều hơn 1 lần"
+  - name: out_of_order_count
+    type: integer
+    description: "Số lần ID thứ i > ID thứ i+1 theo thứ tự nhận"
+
+metrics:
+  - trade_id_gap_count
+  - trade_id_gap_missing_total
+  - trade_id_duplicate_count
+  - trade_id_out_of_order_count

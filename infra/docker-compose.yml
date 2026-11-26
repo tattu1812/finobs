@@ -507,19 +507,21 @@ services:
   alertmanager:
     image: prom/alertmanager:v0.28.1
     container_name: finobs-alertmanager
-    entrypoint: ["/bin/sh", "/etc/finobs-alertmanager/entrypoint.sh"]
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     ports:
       - "${ALERTMANAGER_PORT:-9093}:9093"
     volumes:
-      - ./configs/alertmanager:/etc/finobs-alertmanager:ro
+      - ./configs/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
       - alertmanager_data:/alertmanager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9093/-/healthy > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     mem_limit: 128m
-    restart: unless-stopped
-    networks:
-      - finobs-network
 
   # Trạng thái DAG run của Airflow cho Prometheus (pipeline health).
   pipeline-exporter:

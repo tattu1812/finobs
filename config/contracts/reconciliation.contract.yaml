@@ -1,0 +1,54 @@
+name: reconciliation_report
+version: "1.0.0"
+description: >
+  Kết quả đối soát D+1 giữa stream bronze và file chính thức Binance (DE-B, Sprint 4).
+  Chỉ áp dụng cho Binance — Coinbase chuyển sang real-time reconciliation tại nguồn.
+
+columns:
+  - name: symbol
+    type: string
+    description: "Mã Binance (symbol_native, vd BTCUSDT)"
+  - name: status
+    type: string
+    enum: [OK, MISSING_IN_STREAM, EXTRA_IN_STREAM, VALUE_MISMATCH, OFFICIAL_NOT_AVAILABLE]
+    description: >
+      OK: khớp hoàn toàn.
+      MISSING_IN_STREAM: có trade trong file chính thức nhưng không có trong stream.
+      EXTRA_IN_STREAM: có trade trong stream nhưng không có trong file chính thức.
+      VALUE_MISMATCH: trade ID khớp nhưng giá/khối lượng/thời gian sai.
+      OFFICIAL_NOT_AVAILABLE: file chính thức chưa có (Binance chưa công bố hoặc tải lỗi).
+  - name: official_count
+    type: integer
+    description: "Số trade trong file chính thức"
+  - name: stream_count
+    type: integer
+    description: "Số trade unique trong stream (bronze.trades_raw)"
+  - name: matched
+    type: integer
+    description: "Số trade khớp hoàn toàn (cả ID, giá, qty, thời gian)"
+  - name: match_ratio
+    type: float
+    description: "matched / official_count"
+  - name: missing_in_stream
+    type: array
+    description: "Danh sách trade_id thiếu (rút gọn)"
+  - name: extra_in_stream
+    type: array
+    description: "Danh sách trade_id thừa (rút gọn)"
+  - name: value_mismatches
+    type: array
+    description: "Danh sách {trade_id, field, stream_value, official_value}"
+  - name: detection_coverage
+    type: float
+    description: "Tỷ lệ trade thiếu đã được gap detection bắt ngay (0.0 → 1.0)"
+
+tolerances:
+  price_tolerance: "Xem config/reconcile.yaml"
+  qty_tolerance: "Xem config/reconcile.yaml"
+  time_tolerance_ms: "Xem config/reconcile.yaml"
+
+metrics:
+  - reconciliation_match_ratio
+  - reconciliation_missing_trades
+  - reconciliation_extra_trades
+  - reconciliation_value_mismatch

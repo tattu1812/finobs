@@ -1,0 +1,131 @@
+groups:
+- name: finobs-slo-burn-rate-alerts
+  rules:
+  - alert: SLOBurnRate_live_freshness_crypto_fast_page
+    expr: slo_burn_rate{slo="live_freshness_crypto"} > 14.4
+    for: 5m
+    labels:
+      severity: critical
+      pillar: freshness
+      slo: live_freshness_crypto
+      owner: OB
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO live_freshness_crypto burn rate vượt ngưỡng 14.4x (5m/1h)
+      description: Độ tươi trade live cho nguồn crypto 24/7 <= 30 giây.
+  - alert: SLOBurnRate_live_freshness_crypto_slow_ticket
+    expr: slo_burn_rate{slo="live_freshness_crypto"} > 1.0
+    for: 6h
+    labels:
+      severity: medium
+      pillar: freshness
+      slo: live_freshness_crypto
+      owner: OB
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO live_freshness_crypto burn rate vượt ngưỡng 1.0x (6h/3d)
+      description: Độ tươi trade live cho nguồn crypto 24/7 <= 30 giây.
+  - alert: SLOBurnRate_live_freshness_vnstock_fast_page
+    expr: slo_burn_rate{slo="live_freshness_vnstock"} > 14.4
+    for: 5m
+    labels:
+      severity: high
+      pillar: freshness
+      slo: live_freshness_vnstock
+      owner: OB
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO live_freshness_vnstock burn rate vượt ngưỡng 14.4x (5m/1h)
+      description: Độ tươi trade cho nguồn vnstock trong giờ giao dịch HOSE.
+  - alert: SLOBurnRate_ingest_volume_availability_fast_page
+    expr: slo_burn_rate{slo="ingest_volume_availability"} > 14.4
+    for: 5m
+    labels:
+      severity: critical
+      pillar: volume
+      slo: ingest_volume_availability
+      owner: OB
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO ingest_volume_availability burn rate vượt ngưỡng 14.4x (5m/1h)
+      description: Mỗi cửa sổ 1 phút đều phải có trade hợp lệ được ghi nhận (> 0).
+  - alert: SLOBurnRate_trade_id_completeness_fast_page
+    expr: slo_burn_rate{slo="trade_id_completeness"} > 6.0
+    for: 5m
+    labels:
+      severity: high
+      pillar: completeness
+      slo: trade_id_completeness
+      owner: DE
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO trade_id_completeness burn rate vượt ngưỡng 6.0x (5m/1h)
+      description: Chuỗi trade ID không bị mất gói (gap_missing_total == 0) và đối
+        soát D+1 đạt >= 99.9%.
+  - alert: SLOBurnRate_trade_id_completeness_slow_ticket
+    expr: slo_burn_rate{slo="trade_id_completeness"} > 1.0
+    for: 6h
+    labels:
+      severity: medium
+      pillar: completeness
+      slo: trade_id_completeness
+      owner: DE
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO trade_id_completeness burn rate vượt ngưỡng 1.0x (6h/3d)
+      description: Chuỗi trade ID không bị mất gói (gap_missing_total == 0) và đối
+        soát D+1 đạt >= 99.9%.
+  - alert: SLOBurnRate_daily_reconciliation_coverage_daily_check
+    expr: slo_burn_rate{slo="daily_reconciliation_coverage"} > 1.0
+    for: 1h
+    labels:
+      severity: high
+      pillar: completeness
+      slo: daily_reconciliation_coverage
+      owner: DE
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO daily_reconciliation_coverage burn rate vượt ngưỡng 1.0x (1h/24h)
+      description: Tỷ lệ khớp đối soát D+1 Binance >= 99.9%.
+  - alert: SLOBurnRate_schema_contract_compliance_fast_page
+    expr: slo_burn_rate{slo="schema_contract_compliance"} > 14.4
+    for: 5m
+    labels:
+      severity: critical
+      pillar: schema
+      slo: schema_contract_compliance
+      owner: DE
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO schema_contract_compliance burn rate vượt ngưỡng 14.4x (5m/1h)
+      description: Tỷ lệ vi phạm data contract mỗi phút <= 0.1%.
+  - alert: SLOBurnRate_trade_size_distribution_stability_slow_ticket
+    expr: slo_burn_rate{slo="trade_size_distribution_stability"} > 1.0
+    for: 6h
+    labels:
+      severity: low
+      pillar: distribution
+      slo: trade_size_distribution_stability
+      owner: OB
+      service: finobs-observability
+      source: '{{ $labels.source }}'
+      symbol: '{{ $labels.symbol }}'
+    annotations:
+      summary: SLO trade_size_distribution_stability burn rate vượt ngưỡng 1.0x (6h/3d)
+      description: Sketch size p95 không vượt ngưỡng bất thường.
