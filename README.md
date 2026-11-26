@@ -277,10 +277,11 @@ Xem [observability/collectors/README.md](observability/collectors/README.md) và
 | `make reprocess FROM= TO=` | Tính lại silver/gold từ bronze |
 | `make bench` | Chạy injector trên các scenario |
 | `make load-official DATE=...` | Nạp file chính thức Binance của một ngày |
+| `make reconcile DATE=...` | Đối soát D+1 stream vs file chính thức Binance (`SYMBOLS`, `FROM`, `TO`, `FIXTURE_DIR`) |
 | `make venv` | Tạo `.venv` và cài dependency cho ingest + test |
 | `make clock-check` / `record` / `analyze` | Đo đồng hồ, thu file, sinh bảng đo (Sprint 1) |
 | `make validate-contracts` / `validate-scenarios` | Validate data contract và scenario |
-| `make test` | Mọi unit test (`test-platform`, `test-observability`, `test-agent`) |
+| `make test` | Mọi unit test (`test-platform`, `test-observability`, `test-agent`, `test-reconcile`, `test-sprint4`) |
 | `make test-spark` | Logic silver/gold trên Spark local (trong image `finobs-spark`) |
 | `make lineage` | In đồ thị lineage |
 
@@ -343,6 +344,8 @@ helm lint infra/helm/finobs        # nếu có sửa Helm chart
 | [docs/sprint3/summary.md](docs/sprint3/summary.md) | Tóm tắt Sprint 3: khóa hạ tầng, số liệu, phát hiện |
 | [docs/sprint2/summary.md](docs/sprint2/summary.md) | Tóm tắt Sprint 2: pipeline end-to-end, số liệu, phát hiện |
 | [docs/conventions/bronze-freeze.md](docs/conventions/bronze-freeze.md) | Quy định khóa bronze trong đợt thu 14 ngày |
+| [docs/sprint4/reconciliation.md](docs/sprint4/reconciliation.md) | Sprint 4: Gap detection & Đối soát D+1 Binance |
+| [docs/sprint4-de-handoff.md](docs/sprint4-de-handoff.md) | Sprint 4: Bàn giao DE cho OB, AI và EV |
 | [docs/sprint1/summary.md](docs/sprint1/summary.md) | Tóm tắt Sprint 1 trong một trang |
 | [docs/sprint1/report.md](docs/sprint1/report.md) | Báo cáo đầy đủ Sprint 1 |
 | [docs/conventions/lineage-naming.md](docs/conventions/lineage-naming.md) | Quy ước tên dataset/job trong lineage và scenario |

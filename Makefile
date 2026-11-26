@@ -20,9 +20,9 @@ endif
 TRINO = docker exec finobs-trino trino --output-format ALIGNED --execute
 
 .PHONY: help check build up down stop restart ps logs venv clock-check record analyze \
-	validate-contracts validate-scenarios test test-agent test-observability test-platform \
+	validate-contracts validate-scenarios test test-agent test-observability test-platform test-reconcile \
 	lineage bronze-check official-check load-official up-core timesync reprocess gold-check \
-	completeness-check bench test-spark
+	completeness-check bench test-spark reconcile
 
 help:
 	@echo "FinObs commands:"
@@ -45,6 +45,7 @@ help:
 	@echo "  make gold-check         - Gold có tính đúng không: đếm lại từ silver, phải khớp 100%"
 	@echo "  make completeness-check - Stream có đủ không: gold Binance so với file chính thức ngày DATE (chỉ số C2)"
 	@echo "  make bench              - Chạy injector trên mọi scenario (ra bench/, BENCH_DSN= để ghi bench.scenarios)"
+	@echo "  make reconcile          - Đối soát D+1 stream vs file chính thức (DATE=$(DATE))"
 	@echo ""
 	@echo "Ingest (chạy trên máy, ra file):"
 	@echo "  make venv               - Tạo .venv và cài requirements-ingest.txt + requirements-test.txt"
@@ -111,8 +112,9 @@ analyze: $(PY_DEP)
 validate-contracts: $(PY_DEP)
 	$(PY) platform/contracts/validate.py --in $(VALIDATE_IN)
 	$(PY) platform/contracts/validate.py --in tests/fixtures/invalid --expect-invalid --show 0
+	$(PY) -c "import yaml, pathlib; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in sorted(pathlib.Path('config/contracts').glob('*.contract.yaml'))]"
 
-test: test-platform test-observability test-agent
+test: test-platform test-observability test-agent test-reconcile test-sprint4
 
 test-platform: $(PY_DEP)
 	$(PY) -m unittest tests.test_producer_sinks tests.test_kraken_adapter tests.test_binance_official \
@@ -129,6 +131,15 @@ test-observability: $(PY_DEP)
 test-spark:
 	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo -e PYTHONDONTWRITEBYTECODE=1 finobs-spark:local \
 	  sh -c 'PYTHONPATH=/opt/spark/python:$$(ls /opt/spark/python/lib/py4j-*.zip) python3 -m unittest tests.test_silver_gold -v'
+
+test-reconcile: $(PY_DEP)
+	$(PY) -m unittest tests.test_gap_detection tests.test_reconcile -v
+
+test-sprint4: $(PY_DEP)
+	$(PY) -m unittest tests.test_sketch_profiler tests.test_slo_engine tests.test_rca_incidents tests.test_eval_v2 -v
+
+validate-slo: $(PY_DEP)
+	$(PY) -c "from observability.slo.slo_engine import validate_slo_file; validate_slo_file(); print('SLO YAML OK')"
 
 lineage: $(PY_DEP)
 	$(PY) -m agent.tools.lineage_graph --alerts $(if $(MARQUEZ_URL),--marquez-url $(MARQUEZ_URL))
@@ -188,3 +199,9 @@ completeness-check:
 
 bench: $(PY_DEP)
 	$(PY) evaluation/injector/inject.py evaluation/scenarios/S0*.yaml --out bench $(if $(BENCH_DSN),--dsn $(BENCH_DSN))
+
+reconcile: $(PY_DEP)
+	$(PY) observability/reconcile/reconcile.py --date $(DATE) \
+	  $(if $(SYMBOLS),--symbols $(SYMBOLS)) \
+	  $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO)) \
+	  $(if $(FIXTURE_DIR),--fixture-dir $(FIXTURE_DIR))
