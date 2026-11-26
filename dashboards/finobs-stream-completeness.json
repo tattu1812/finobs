@@ -1,0 +1,221 @@
+{
+  "uid": "finobs-stream-completeness",
+  "title": "FinObs - Stream Completeness & C2",
+  "tags": ["finobs", "completeness", "reconciliation", "c2"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "type": "custom",
+        "label": "Nguồn",
+        "query": "binance,coinbase,kraken,vnstock",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true,
+        "multi": true,
+        "options": [
+          {"text": "All", "value": "$__all", "selected": true},
+          {"text": "binance", "value": "binance", "selected": false},
+          {"text": "coinbase", "value": "coinbase", "selected": false},
+          {"text": "kraken", "value": "kraken", "selected": false},
+          {"text": "vnstock", "value": "vnstock", "selected": false}
+        ]
+      },
+      {
+        "name": "symbol",
+        "type": "custom",
+        "label": "Mã",
+        "query": "BTCUSDT,ETHUSDT,BTC-USD,ETH-USD",
+        "current": {"text": "All", "value": "$__all"},
+        "includeAll": true,
+        "multi": true,
+        "options": [
+          {"text": "All", "value": "$__all", "selected": true},
+          {"text": "BTCUSDT", "value": "BTCUSDT", "selected": false},
+          {"text": "ETHUSDT", "value": "ETHUSDT", "selected": false},
+          {"text": "BTC-USD", "value": "BTC-USD", "selected": false},
+          {"text": "ETH-USD", "value": "ETH-USD", "selected": false}
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Độ đầy đủ stream (Completeness %)",
+      "description": "Tỷ lệ trade khớp từ đối soát D+1 (reconciliation_match_ratio) hoặc ước lượng theo dải trade ID.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 0, "y": 0, "w": 6, "h": 5},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.99},
+              {"color": "green", "value": 0.999}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "finobs:reconciliation_match_ratio:avg{source=~\"$source\",symbol=~\"$symbol\"}",
+          "legendFormat": "{{source}} / {{symbol}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Tổng khoảng hở Trade ID (24h)",
+      "description": "Số khoảng hở phát hiện theo trade_id_gap_count.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 6, "y": 0, "w": 6, "h": 5},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "sum(finobs:trade_id_gap_count:sum{source=~\"$source\",symbol=~\"$symbol\"})",
+          "legendFormat": "gaps"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Trade thiếu (trade_id_gap_missing_total)",
+      "description": "Tổng số trade ID bị thiếu theo bộ phát hiện khoảng hở.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 12, "y": 0, "w": 6, "h": 5},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "sum(finobs:trade_id_gap_missing_total:sum{source=~\"$source\",symbol=~\"$symbol\"})",
+          "legendFormat": "missing_trades"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Trạng thái thu liên tục (Ngày thu)",
+      "description": "Số ngày thu liên tục tính từ ngày đầu thu (2026-11-26) dựa trên metric producer hoạt động.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 18, "y": 0, "w": 6, "h": 5},
+      "fieldConfig": {"defaults": {"unit": "d"}, "overrides": []},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "(time() - 1795680000) / 86400",
+          "legendFormat": "days_since_start"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Khoảng hở & Trade thiếu theo thời gian",
+      "description": "Chuỗi thời gian trade_id_gap_count và trade_id_gap_missing_total theo nguồn & mã.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 0, "y": 5, "w": 12, "h": 8},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "finobs:trade_id_gap_count:sum{source=~\"$source\",symbol=~\"$symbol\"}",
+          "legendFormat": "gaps {{source}} {{symbol}}"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "B",
+          "expr": "finobs:trade_id_gap_missing_total:sum{source=~\"$source\",symbol=~\"$symbol\"}",
+          "legendFormat": "missing {{source}} {{symbol}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Độ trễ sàn → ingest_ts (p95) & Độ trễ ghi Bronze",
+      "description": "ingest_delay_p95_ms và tuổi snapshot mới nhất trên bronze.trades_raw.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 12, "y": 5, "w": 12, "h": 8},
+      "fieldConfig": {"defaults": {"unit": "ms"}, "overrides": []},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "finobs:ingest_delay_p95_ms:avg{source=~\"$source\"}",
+          "legendFormat": "ingest_p95 {{source}}"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "B",
+          "expr": "finobs_stream_batch_duration_ms{query=\"bronze_trades\"}",
+          "legendFormat": "bronze_batch_ms"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Tỷ lệ khớp đối soát D+1 theo ngày",
+      "description": "reconciliation_match_ratio theo mã Binance và ngày đối soát.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 0, "y": 13, "w": 12, "h": 7},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "finobs:reconciliation_match_ratio:avg{source=~\"$source\",symbol=~\"$symbol\"}",
+          "legendFormat": "{{symbol}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Trạng thái đối soát từng ngày & Quãng gián đoạn",
+      "description": "Hiển thị MISSING_IN_STREAM / VALUE_MISMATCH / OK và quãng gián đoạn nếu producer im lặng.",
+      "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+      "gridPos": {"x": 12, "y": 13, "w": 12, "h": 7},
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "finobs-prometheus"},
+          "refId": "A",
+          "expr": "finobs:reconciliation_missing_trades:sum{source=~\"$source\",symbol=~\"$symbol\"}",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}
