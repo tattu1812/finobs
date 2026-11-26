@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from observability.slo.slo_engine import (
+from observability.slo.slo_engine import (  # noqa: E402
     DEFAULT_SLOS_PATH,
     evaluate_slo,
     generate_prometheus_burn_rate_rules,

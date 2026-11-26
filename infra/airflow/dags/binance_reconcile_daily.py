@@ -41,14 +41,12 @@ def load_official_if_needed(symbol: str, data_interval_start=None, **_) -> dict:
 
 def reconcile_symbol_task(symbol: str, data_interval_start=None, **_) -> dict:
     """Chạy đối soát cho 1 mã, 1 ngày."""
-    from decimal import Decimal
 
     # Thêm path cho module reconcile
     sys.path.insert(0, str(FINOBS_HOME))
 
     from observability.reconcile.reconcile import (
         ReconcileReport,
-        generate_markdown,
         reconcile_result_to_metrics,
         reconcile_symbol,
     )
@@ -151,7 +149,7 @@ def reconcile_symbol_task(symbol: str, data_interval_start=None, **_) -> dict:
     report_dir = FINOBS_HOME / "reports" / "reconcile"
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    report = ReconcileReport(
+    _report = ReconcileReport(  # noqa: F841
         report_date=day_str, run_at=observed_at, code_version="airflow",
         is_partial_day=False, window_from=None, window_to=None,
         symbols=[result],

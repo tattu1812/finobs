@@ -13,7 +13,6 @@ import hashlib
 import math
 import time
 import tracemalloc
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal

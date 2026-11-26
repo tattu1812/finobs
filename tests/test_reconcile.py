@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from observability.reconcile.reconcile import (
+from observability.reconcile.reconcile import (  # noqa: E402
     ReconcileReport,
     SymbolResult,
     generate_markdown,
