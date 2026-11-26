@@ -83,3 +83,17 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Injector v2 (`evaluation/injector/injector_v2.py`)**: Hỗ trợ 8 loại lỗi (`FT01`, `FT02`, `FT03`, `FT05`, `FT06`, `FT07`, `FT09`, `FT12`), mặc định `dry_run=True`, topic tiêm thử có tiền tố `test.`.
 - **MTTD Harness (`evaluation/bench/mttd_harness.py`)**: Xuất kết quả benchmark ra `reports/bench/mttd_summary.{json,csv,md}`.
 - **Phân tách kịch bản**: Nhóm chỉnh tham số (*tuning*) tách khỏi nhóm đánh giá (*eval*) theo `evaluation/scenarios/benchmark_split.yaml`.
+
+---
+
+# Hợp đồng Giao tiếp — Sprint 5
+
+## OB (Sprint 5) — Detector Interface & Baseline Detectors
+
+- **Interface chung (`observability/detectors/base.py`)**: `BaseDetector.detect(observations) -> list[DetectorAlert]`.
+  - `DetectorAlert`: `{detector, source, symbol, ts, detected_at, asset, score, severity, evidence, metric, labels}` — tương thích trực tiếp với `evaluation/bench/mttd_harness.py`.
+- **Hai baseline**:
+  - `ZScoreSingleSourceDetector` (`observability/detectors/zscore_single.py`): rolling z-score đơn nguồn (hỗ trợ `robust_mad`, warm-up `min_samples`, chống ô nhiễm cửa sổ, xử lý `std == 0` và `None`).
+  - `HistoricalBoundsDetector` (`observability/detectors/historical_bounds.py`): dùng `KLLSketch` học phân vị `[lower_quantile, upper_quantile]` có nới biên `margin_factor`, tách biệt `fit()` và `detect()`.
+- **Cấu hình**: [`config/detectors.yaml`](../config/detectors.yaml).
+- **CLI**: `python observability/detectors/run_baseline.py --input <obs.json> --detector both`.
