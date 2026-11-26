@@ -9,9 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from observability.rca.impact_bfs import bfs_downstream_impact
-from observability.rca.incident_grouper import group_alerts
-from observability.rca.priority_ranker import export_ranked_json, rank_incidents
+from observability.rca.impact_bfs import bfs_downstream_impact  # noqa: E402
+from observability.rca.incident_grouper import group_alerts  # noqa: E402
+from observability.rca.priority_ranker import export_ranked_json, rank_incidents  # noqa: E402
 
 SAMPLE_GRAPH = {
     "nodes": [

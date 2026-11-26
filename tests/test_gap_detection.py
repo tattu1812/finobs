@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from observability.reconcile.gap_detection import (
+from observability.reconcile.gap_detection import (  # noqa: E402
     Gap,
     GapReport,
     analyze_trade_id_sequence,

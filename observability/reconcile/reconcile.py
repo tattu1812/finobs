@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -36,7 +35,6 @@ if str(ROOT) not in sys.path:
 from observability.reconcile.gap_detection import (  # noqa: E402
     GapReport,
     analyze_trade_id_sequence,
-    gap_report_to_metrics,
 )
 
 # ---------------------------------------------------------------------------

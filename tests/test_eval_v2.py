@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from evaluation.bench.mttd_harness import evaluate_mttd, write_bench_reports
-from evaluation.injector.injector_v2 import SUPPORTED_FAULTS, inject_fault
+from evaluation.bench.mttd_harness import evaluate_mttd, write_bench_reports  # noqa: E402
+from evaluation.injector.injector_v2 import SUPPORTED_FAULTS, inject_fault  # noqa: E402
 
 
 def _sample_records(n: int = 10):

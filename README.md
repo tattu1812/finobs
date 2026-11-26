@@ -5,7 +5,7 @@ nhiều nguồn (Binance, Coinbase, VN30 qua vnstock), kiểm tra dữ liệu th
 (độ tươi, khối lượng, phân phối...) và dùng một agent LLM để chẩn đoán nguyên nhân gốc khi dữ liệu hỏng âm thầm
 (*silent data failures*): trùng lặp, đổi schema, lệch đồng hồ, dữ liệu cũ...
 
-> Trạng thái: đang phát triển, đã xong **Sprint 4** (đối soát D+1 Binance, gap detection, sketch profiling, SLO burn rate, gộp sự cố RCA, injector v2 & MTTD harness, backup/restore). Xem [Trạng thái dự án](#trạng-thái-dự-án).
+> Trạng thái: đang phát triển, đã xong **Sprint 5** (replay tool, z-score & historical-bounds detectors, ReAct agent v1, stream-completeness dashboard, 22 kịch bản evaluation, baseline sơ bộ). Xem [Trạng thái dự án](#trạng-thái-dự-án).
 
 ---
 
@@ -53,24 +53,27 @@ flowchart LR
     INJ[Injector<br/>bench.*] -. tiêm lỗi .-> P
 ```
 
-Đã hoàn thiện (Sprint 4): 3 sàn crypto + vnstock → Kafka → bronze → silver → gold, DAG nạp & đối soát D+1 file chính thức,
-metric 5 trụ cột + completeness/reconciliation + sketch profiling + SLO burn rate, OpenLineage từ mọi job, gộp sự cố & xếp hạng RCA, injector v2 + MTTD harness, backup/restore.
-Chưa có: detector C1, vòng lặp LLM agent hoàn chỉnh, benchmark ≥ 100 kịch bản.
+Đã hoàn thiện (Sprint 5): 3 sàn crypto + vnstock → Kafka → bronze → silver → gold, DAG nạp & đối soát D+1 file chính thức,
+metric 5 trụ cột + completeness/reconciliation + sketch profiling + SLO burn rate, OpenLineage từ mọi job, gộp sự cố & xếp hạng RCA, injector v2 + MTTD harness, backup/restore,
+**replay tool** (phát lại dữ liệu lịch sử tốc độ cao, namespace cách ly), **z-score & historical-bounds detectors** (baseline C2), **ReAct agent v1** (5 tools + LLM loop), **stream-completeness dashboard & backfill**, **22 evaluation scenarios** (tuning/eval split), baseline sơ bộ M2–M6.
+Chưa có: detector C1 chạy trên dữ liệu thật liên tục, benchmark ≥ 100 kịch bản, API/dashboard nghiệp vụ.
 
 ## Trạng thái dự án
 
 | Mảng | Đã có | Chưa có |
 |---|---|---|
-| **Hạ tầng** | Compose 25 service chia profile (lõi / `ops` / `timesync`), `mem_limit` từng service; init tự động; Alertmanager → Telegram; DAG bảo trì Iceberg & đối soát D+1; script backup/restore & runbook; Helm phác thảo; CI build image + chạy test Spark | Template Helm cho các thành phần còn lại, cấu hình production |
+| **Hạ tầng** | Compose 25 service chia profile (lõi / `ops` / `timesync`), `mem_limit` từng service; init tự động; Alertmanager → Telegram; DAG bảo trì Iceberg & đối soát D+1; script backup/restore & runbook; Helm phác thảo; CI build image + chạy test Spark; **replay tool** (`make replay`, namespace `replay.`, 1×–max speed, pause/resume, seed cố định) | Template Helm cho các thành phần còn lại, cấu hình production |
 | **Ingest** | Producer 24/7: Binance, Coinbase, **Kraken** (WS) và vnstock (poll trong phiên HOSE); kiểm contract từng bản ghi (vi phạm → `raw.dlq`); đo NTP | Schema riêng cho vnstock |
 | **Data contract** | Contract 1.1.0 + contract Sprint 4 (`gap_detection`, `reconciliation`, `sketch_profiling`); **bronze bị khóa** trong đợt thu ([quy định](docs/conventions/bronze-freeze.md), CI chặn) | Contract cho bảng silver/gold |
 | **Xử lý dữ liệu** | Bronze (trigger 60 s); **silver** (DECIMAL, taker side, `symbol_std`, khử trùng, bỏ bản ghi trễ > 10 phút); **gold** OHLCV 1 phút, VWAP, spread 3 sàn; `make reprocess` tính lại từ đầu bronze | vnstock silver (`vn_quotes`), dbt |
 | **Lineage** | Mọi job phát OpenLineage về Marquez theo [quy ước tên](docs/conventions/lineage-naming.md) | Facet chi tiết (schema, số dòng) |
 | **Giám sát** | Pipeline health (Kafka lag, thời gian micro-batch, job đứng, gold cũ, DAG lỗi); alert hạ tầng (`infra-alerts`) & **SLO burn rate** (`slo-burn-rate-alerts`) | Dashboard pipeline health trên Grafana |
-| **Observability dữ liệu** | 5 trụ cột + **gap detection** & **đối soát D+1 Binance**, **sketch profiling**, **SLO engine** (`slos.yaml`), **gộp sự cố** (`incident_grouper`) | Detector C1 |
-| **Agent / RCA** | **RCA heuristic** theo lineage (đúng top-1 trên S002); `impact_bfs`, `priority_ranker`; `query_metric`, `get_contract_violations`, `get_job_runs`, `get_lineage` đọc dữ liệu thật | Vòng lặp LLM agent, `list_alerts` thật (cần detector) |
-| **Evaluation** | **Injector v1 & v2**, **MTTD harness** (`mttd_harness.py`), `benchmark_split.yaml`, scenario v1/v2 | Benchmark ≥ 100 kịch bản |
+| **Observability dữ liệu** | 5 trụ cột + **gap detection** & **đối soát D+1 Binance**, **sketch profiling**, **SLO engine** (`slos.yaml`), **gộp sự cố** (`incident_grouper`); **z-score & historical-bounds detectors** (baseline C2, warmup, MAD fallback); **stream-completeness dashboard** & **backfill** | Detector chạy liên tục trên dữ liệu thật |
+| **Agent / RCA** | **RCA heuristic** theo lineage (đúng top-1 trên S002); `impact_bfs`, `priority_ranker`; `query_metric`, `get_contract_violations`, `get_job_runs`, `get_lineage` đọc dữ liệu thật; **ReAct agent v1** (5 tools + LLM loop, `run_agent.py`) | `list_alerts` thật (cần detector chạy liên tục) |
+| **Evaluation** | **Injector v1 & v2**, **MTTD harness** (`mttd_harness.py`), `benchmark_split.yaml`, scenario v1/v2; **22 kịch bản** (11 tuning / 11 eval), **baseline sơ bộ M2–M6**, `run_sprint5_baseline.py`, `volatile_days.yaml` | Benchmark ≥ 100 kịch bản |
 | **API / Dashboard nghiệp vụ** | — | Chưa bắt đầu |
+
+**Sprint 5**: xem [docs/sprint5/detectors-baseline.md](docs/sprint5/detectors-baseline.md), [docs/sprint5/agent-v1.md](docs/sprint5/agent-v1.md), [docs/sprint5/stream-completeness.md](docs/sprint5/stream-completeness.md), [docs/sprint5/targets-m2-m6.md](docs/sprint5/targets-m2-m6.md), [docs/replay.md](docs/replay.md).
 
 **Sprint 4**: xem [docs/sprint4/reconciliation.md](docs/sprint4/reconciliation.md), [docs/sprint4/evaluation-v2.md](docs/sprint4/evaluation-v2.md) và [docs/sprint4-de-handoff.md](docs/sprint4-de-handoff.md).
 

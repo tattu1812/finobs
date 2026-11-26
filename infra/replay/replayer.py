@@ -18,13 +18,12 @@ import csv
 import gzip
 import io
 import json
-import os
 import random
 import sys
 import time
 import tracemalloc
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Protocol
