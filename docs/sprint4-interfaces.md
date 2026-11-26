@@ -83,3 +83,14 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Injector v2 (`evaluation/injector/injector_v2.py`)**: Hỗ trợ 8 loại lỗi (`FT01`, `FT02`, `FT03`, `FT05`, `FT06`, `FT07`, `FT09`, `FT12`), mặc định `dry_run=True`, topic tiêm thử có tiền tố `test.`.
 - **MTTD Harness (`evaluation/bench/mttd_harness.py`)**: Xuất kết quả benchmark ra `reports/bench/mttd_summary.{json,csv,md}`.
 - **Phân tách kịch bản**: Nhóm chỉnh tham số (*tuning*) tách khỏi nhóm đánh giá (*eval*) theo `evaluation/scenarios/benchmark_split.yaml`.
+
+---
+
+# Hợp đồng Giao tiếp — Sprint 5
+
+## EV (Sprint 5) — Baseline Suite, M2–M6 Targets & FinObs-Bench Expansion
+
+- **Baseline Runner (`evaluation/bench/run_sprint5_baseline.py`)**: kết hợp `injector_v2`, detector baseline (giao diện `DetectorAlert` của OB, tự fallback sang stub nếu OB chưa merge) và `mttd_harness.py`. Xuất `reports/bench/sprint5_baseline.{json,csv,md}` với nhãn `is_preliminary: true`.
+- **Phân tách kịch bản (`evaluation/bench/benchmark_split.yaml`)**: 11 kịch bản `tuning` và 11 kịch bản `eval` (tổng 22 kịch bản phủ 8 loại lỗi `FT01`–`FT12` + đối chứng).
+- **Ngày biến động (`evaluation/volatile_days.yaml`)**: danh sách ngày mô phỏng/lịch sử và tiêu chí chọn ngày kiểm thử cảnh báo giả.
+- **Mục tiêu M2–M6 sơ bộ**: [`docs/sprint5/targets-m2-m6.md`](sprint5/targets-m2-m6.md), quy trình thí nghiệm [`docs/sprint5/experiment-protocol.md`](sprint5/experiment-protocol.md), slide demo [`docs/sprint5/demo-slides-outline.md`](sprint5/demo-slides-outline.md).
