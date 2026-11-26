@@ -74,6 +74,8 @@ class Toolbox:
         self.world = world
         self.marquez = marquez
         self.metric_store = metric_store
+        self.violation_store = None   # live_backends.ViolationStore
+        self.job_runs_backend = None  # live_backends.MarquezRuns
         self.specs = {name: load_spec(name) for name in TOOL_NAMES}
         self._in = {n: Draft202012Validator(s["input_schema"]) for n, s in self.specs.items()}
         self.handlers = {n: getattr(self, f"_{n}") for n in TOOL_NAMES}
@@ -90,6 +92,17 @@ class Toolbox:
 
         tb = cls.fake(marquez_url)
         tb.metric_store = MetricStore(dsn)
+        return tb
+
+    @classmethod
+    def live(cls, dsn: str, marquez_url: str) -> Toolbox:
+        """Mọi backend thật đang có: metric store (query_metric, get_contract_violations),
+        Marquez (get_lineage, get_job_runs). list_alerts vẫn đọc dữ liệu giả tới khi có detector."""
+        from agent.tools.live_backends import MarquezRuns, ViolationStore
+
+        tb = cls.with_metric_store(dsn, marquez_url)
+        tb.violation_store = ViolationStore(dsn)
+        tb.job_runs_backend = MarquezRuns(HttpTransport(marquez_url))
         return tb
 
     # ------------------------------------------------------------ cửa vào
@@ -188,6 +201,15 @@ class Toolbox:
     def _get_job_runs(self, args: dict) -> dict:
         start, end = _window(args)
         job = args["job"].removeprefix("job:").split(":")[-1]
+        if self.job_runs_backend is not None:
+            try:
+                return self.job_runs_backend.job_runs(job, start, end, args.get("limit", 10))
+            except MarquezError as exc:
+                if "404" in str(exc):
+                    raise ToolError("not_found", f"Marquez không có job '{job}' trong namespace finobs") from exc
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise ToolError("backend_unavailable", f"Marquez lỗi: {exc}") from exc
         runs = self.world.runs.get(job)
         if runs is None:
             raise ToolError("not_found", f"Không có job '{job}'. Có: {', '.join(sorted(self.world.runs))}")
@@ -206,6 +228,11 @@ class Toolbox:
     def _get_contract_violations(self, args: dict) -> dict:
         start, end = _window(args)
         source = args["source"]
+        if self.violation_store is not None:
+            try:
+                return self.violation_store.violations(source, start, end, args.get("sample_limit", 5))
+            except Exception as exc:  # noqa: BLE001
+                raise ToolError("backend_unavailable", f"Metric store lỗi: {exc}") from exc
         checks = [c for c in self.world.violations.get(source, []) if start <= c["ts"] < end]
         checked = sum(c["checked"] for c in checks)
         invalid = sum(c["invalid"] for c in checks)

@@ -6,7 +6,7 @@
     "additionalProperties": false,
     "required": ["job", "start", "end"],
     "properties": {
-      "job": { "type": "string", "description": "Job name, e.g. bronze_load, or <namespace>:<name>." },
+      "job": { "type": "string", "description": "Job name, e.g. bronze_trades, silver_trades, binance_official_daily, or <namespace>:<name>." },
       "start": { "$ref": "#/$defs/utc_ms" },
       "end": { "$ref": "#/$defs/utc_ms" },
       "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }

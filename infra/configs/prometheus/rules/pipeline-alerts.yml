@@ -1,0 +1,43 @@
+groups:
+  - name: finobs-pipeline-alerts
+    rules:
+      - alert: StreamStalled
+        expr: time() - finobs_stream_last_progress_timestamp_seconds > 300
+        labels: {severity: critical, service: spark}
+        annotations:
+          summary: "Job streaming {{ $labels.query }} không có tiến độ"
+          description: "Quá 5 phút không có micro-batch mới (trigger 60 s)."
+
+      - alert: KafkaConsumerLagHigh
+        expr: max by (query) (finobs_stream_offsets_behind_latest{stat="max"}) > 50000
+        for: 10m
+        labels: {severity: high, service: spark}
+        annotations:
+          summary: "{{ $labels.query }} chậm hơn Kafka {{ $value }} offset"
+          description: "Job đọc không kịp tốc độ ghi của producer trong 10 phút."
+
+      - alert: GoldStale
+        expr: time() - finobs_gold_last_minute_timestamp_seconds > 600
+        labels: {severity: high, service: spark}
+        annotations:
+          summary: "gold.ohlcv_1m không được cập nhật quá 10 phút"
+
+      - alert: SilverLateRowsHigh
+        expr: sum by (source) (increase(finobs_silver_late_rows_total[15m])) > 1000
+        labels: {severity: medium, service: spark}
+        annotations:
+          summary: "{{ $labels.source }}: hơn 1000 bản ghi trễ quá 10 phút bị bỏ khỏi silver trong 15 phút"
+          description: "Thường do sàn phát lại lịch sử (snapshot) hoặc đồng hồ máy thu lệch."
+
+      - alert: AirflowDagFailed
+        expr: finobs_airflow_dag_last_run_success == 0
+        labels: {severity: high, service: airflow}
+        annotations:
+          summary: "DAG {{ $labels.dag_id }}: lượt chạy gần nhất thất bại"
+
+      - alert: AirflowDown
+        expr: finobs_airflow_up == 0
+        for: 5m
+        labels: {severity: high, service: airflow}
+        annotations:
+          summary: "Không gọi được REST API của Airflow"

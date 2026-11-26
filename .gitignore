@@ -25,3 +25,6 @@ temp/
 
 # Local data
 data/
+
+# Đầu ra injector (make bench)
+bench/

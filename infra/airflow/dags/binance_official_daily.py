@@ -23,7 +23,7 @@ from airflow.models.param import Param
 from airflow.operators.python import PythonOperator
 
 FINOBS_HOME = Path("/opt/finobs")
-sys.path.insert(0, str(FINOBS_HOME / "platform" / "batch"))  # thư mục platform/ trùng tên module chuẩn
+sys.path[:0] = [str(FINOBS_HOME / "platform" / "batch"), str(FINOBS_HOME / "platform")]  # platform/ trùng tên module chuẩn
 
 
 def _symbols() -> list[str]:
@@ -36,10 +36,18 @@ def _symbols() -> list[str]:
 
 def load_symbol(symbol: str, data_interval_start=None, params=None, **_) -> dict:
     import binance_official
+    from lineage import LineageEmitter
 
     day = data_interval_start.date()
-    summary = binance_official.load_day(
-        symbol, day, tamper=bool((params or {}).get("simulate_corruption", False)))
+    lineage = LineageEmitter.from_env()
+    run = lineage.start("binance_official_daily", outputs=["bronze.binance_official_trades"])
+    try:
+        summary = binance_official.load_day(
+            symbol, day, tamper=bool((params or {}).get("simulate_corruption", False)))
+    except Exception as exc:
+        lineage.fail(run, repr(exc))
+        raise
+    lineage.complete(run)
     print(json.dumps(summary, ensure_ascii=False))
     return summary
 

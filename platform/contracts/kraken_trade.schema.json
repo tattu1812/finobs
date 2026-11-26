@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://finobs.example/contracts/kraken_trade.schema.json",
+  "title": "Kraken trade (raw event)",
+  "description": "Bản ghi source=kraken (contract 1.1.0): vỏ chung + 1 phần tử data[] của kênh trade (WebSocket API v2). Ràng buộc rút ra từ message thật thu ngày 2026-11-25.",
+  "allOf": [{ "$ref": "raw_event.schema.json" }],
+  "properties": {
+    "source": { "const": "kraken" },
+    "symbol_native": {
+      "description": "Kraken v2 viết BASE/QUOTE (vd BTC/USD).",
+      "type": "string",
+      "pattern": "^[A-Z0-9]+/[A-Z0-9]+$"
+    },
+    "transport": {
+      "description": "Kraken gom 1..N trade mỗi message (quan sát tới 8); kênh trade không có số thứ tự message.",
+      "required": ["is_snapshot"],
+      "properties": {
+        "msg_seq": { "type": "null" }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "side", "price", "qty", "ord_type", "trade_id", "timestamp"],
+      "properties": {
+        "symbol": {
+          "description": "Mã, trùng symbol_native.",
+          "type": "string",
+          "pattern": "^[A-Z0-9]+/[A-Z0-9]+$"
+        },
+        "side": {
+          "description": "Phía taker.",
+          "type": "string",
+          "enum": ["buy", "sell"]
+        },
+        "price": {
+          "description": "Giá. Sàn gửi SỐ JSON; producer đọc nguyên văn thành chuỗi (parse_float=str), không làm tròn.",
+          "$ref": "raw_event.schema.json#/$defs/decimal_string"
+        },
+        "qty": {
+          "description": "Khối lượng, xử lý như price.",
+          "$ref": "raw_event.schema.json#/$defs/decimal_string"
+        },
+        "ord_type": {
+          "description": "Loại lệnh taker.",
+          "type": "string",
+          "enum": ["limit", "market"]
+        },
+        "trade_id": {
+          "description": "Số nguyên tăng dần theo từng mã. Trùng sequence.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "timestamp": {
+          "description": "Thời điểm khớp, UTC, RFC 3339 (quan sát 6 chữ số lẻ giây).",
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$"
+        }
+      }
+    }
+  }
+}

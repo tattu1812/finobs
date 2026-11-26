@@ -182,6 +182,38 @@ async def run(symbols, writer: RawWriter, ops: OpsLog, stop: asyncio.Event,
                 backoff = min(backoff * 2, MAX_BACKOFF)
 
 
+def next_session_start(now: datetime | None = None) -> datetime:
+    """Mốc mở phiên kế tiếp (UTC) tính từ now; bỏ qua thứ 7, chủ nhật. Ngày lễ chưa xét
+    (lịch nghỉ nằm ở observability/slo/trading_calendar, poll ngày lễ chỉ thấy 0 trade mới)."""
+    local = (now or datetime.now(timezone.utc)).astimezone(VN_TZ)
+    for days in range(0, 8):
+        day = (local + timedelta(days=days)).date()
+        if day.weekday() >= 5:
+            continue
+        for start, _end in SESSIONS:
+            candidate = datetime.combine(day, start, tzinfo=VN_TZ)
+            if candidate > local:
+                return candidate.astimezone(timezone.utc)
+    raise RuntimeError("không tìm được phiên kế tiếp")
+
+
+async def run_forever(symbols, writer: RawWriter, ops: OpsLog, stop: asyncio.Event,
+                      max_rpm: int = 60) -> None:
+    """Cho producer chạy 24/7: trong phiên thì poll (run tự trả về khi hết phiên),
+    ngoài phiên thì ngủ tới phiên kế tiếp. max_rpm=60 theo NFR-12 (20-60 lượt/phút)."""
+    while not stop.is_set():
+        if in_session():
+            await run(symbols, writer, ops, stop, max_rpm=max_rpm)
+            continue
+        wake = next_session_start()
+        ops.event("sleep_until_session", wake_utc=wake.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        delay = max(1.0, (wake - datetime.now(timezone.utc)).total_seconds())
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=delay)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--minutes", type=float, default=60.0)
