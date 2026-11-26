@@ -11,7 +11,10 @@ RUN pip install --no-cache-dir -r requirements-runtime.txt
 COPY config/ config/
 COPY platform/contracts/ platform/contracts/
 COPY platform/ingest/ platform/ingest/
+COPY platform/lineage.py platform/lineage.py
 COPY observability/collectors/ observability/collectors/
+COPY observability/slo/ observability/slo/
+COPY observability/store/ observability/store/
 COPY observability/metric_catalog.yaml observability/
 
 # Volume raw dùng chung giữa producer (ghi) và collector (đọc).

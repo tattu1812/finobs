@@ -98,6 +98,27 @@ Test tích hợp (`tests/test_metric_store.py`) chỉ chạy khi có biến `FIN
 Tên dataset theo [quy ước đặt tên lineage](../../docs/conventions/lineage-naming.md): trùng tên topic
 Kafka / bảng Iceberg thật (`raw.binance.trade`, `bronze.trades_raw`...).
 
+## Backend thật khác (Sprint 3)
+
+| Tool | Backend thật | File |
+|---|---|---|
+| `get_job_runs` | API runs của Marquez: mọi job (producer, Spark, DAG) đều phát OpenLineage | [`live_backends.py`](live_backends.py) `MarquezRuns` |
+| `get_contract_violations` | Metric `contract_violation_*` + bảng `contract_violation_samples` do collector ghi | [`live_backends.py`](live_backends.py) `ViolationStore` |
+| `get_lineage` | Marquez thật: đồ thị raw → bronze → silver → gold do job tự phát (cần facet `jobType: STREAMING`) | [`marquez.py`](marquez.py) |
+
+```python
+tb = Toolbox.live(dsn="postgresql://finobs:<mật khẩu>@localhost:5435/finobs_metrics",
+                  marquez_url="http://localhost:5000")
+```
+
+`list_alerts` vẫn đọc dữ liệu giả tới khi có detector (S4–S5).
+
+## RCA heuristic
+
+[`observability/rca/heuristic.py`](../../observability/rca/heuristic.py) (phương pháp 1 của đặc tả 5.3) lấy alert
+qua `list_alerts` và đồ thị qua `get_lineage`, rồi xếp hạng ứng viên. Đúng top-1 trên thế giới giả S002 và trên đồ
+thị Marquez thật (ca giả lập alert ở `raw.coinbase.trade` lan xuống bronze, silver, gold).
+
 ## Việc tiếp theo
 
 - Khi job Spark/Airflow phát OpenLineage thật (S3), chạy lại `make lineage MARQUEZ_URL=...` để xác

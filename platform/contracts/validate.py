@@ -28,11 +28,16 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 HERE = Path(__file__).resolve().parent
-SCHEMA_BY_SOURCE = {"binance": "binance_trade", "coinbase": "coinbase_trade"}
+SCHEMA_BY_SOURCE = {"binance": "binance_trade", "coinbase": "coinbase_trade", "kraken": "kraken_trade"}
 FALLBACK = "raw_event"
 
 # (khoá id trong payload, khoá mã trong payload)
-PAYLOAD_KEYS = {"binance": ("t", "s"), "coinbase": ("trade_id", "product_id"), "vnstock": ("id", "symbol")}
+PAYLOAD_KEYS = {
+    "binance": ("t", "s"),
+    "coinbase": ("trade_id", "product_id"),
+    "kraken": ("trade_id", "symbol"),
+    "vnstock": ("id", "symbol"),
+}
 
 
 def load_validators() -> dict:

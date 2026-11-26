@@ -1,0 +1,29 @@
+# Lịch giao dịch dùng cho SLO freshness (FR-15, Sprint 3 OB-5).
+# Giờ Việt Nam là UTC+7 cố định (không có giờ mùa hè).
+#
+# verified: false = suy ra từ Bộ luật Lao động và lịch âm, CHƯA đối chiếu thông báo nghỉ lễ chính thức
+# của HOSE/HNX năm 2026. OB cần đối chiếu và đổi thành true (hoặc sửa ngày) trước khi chạy thí nghiệm.
+
+timezone_offset_hours: 7
+
+exchanges:
+  HOSE:
+    # ATO 09:00-09:15, liên tục 09:15-11:30, nghỉ trưa, liên tục 13:00-14:30, ATC 14:30-14:45
+    sessions: [["09:00", "11:30"], ["13:00", "14:45"]]
+    weekdays: [0, 1, 2, 3, 4]   # thứ Hai .. thứ Sáu
+  HNX:
+    sessions: [["09:00", "11:30"], ["13:00", "14:45"]]
+    weekdays: [0, 1, 2, 3, 4]
+
+holidays:
+  - {date: 2026-01-01, name: "Tết Dương lịch", verified: true}
+  - {date: 2026-02-16, name: "Tết Nguyên đán (29 tháng Chạp)", verified: false}
+  - {date: 2026-02-17, name: "Tết Nguyên đán (mùng 1)", verified: false}
+  - {date: 2026-02-18, name: "Tết Nguyên đán (mùng 2)", verified: false}
+  - {date: 2026-02-19, name: "Tết Nguyên đán (mùng 3)", verified: false}
+  - {date: 2026-02-20, name: "Tết Nguyên đán (mùng 4)", verified: false}
+  - {date: 2026-04-27, name: "Giỗ Tổ Hùng Vương (26/4 là Chủ nhật, nghỉ bù)", verified: false}
+  - {date: 2026-04-30, name: "Ngày Thống nhất", verified: true}
+  - {date: 2026-05-01, name: "Quốc tế Lao động", verified: true}
+  - {date: 2026-09-01, name: "Quốc khánh (ngày liền kề)", verified: false}
+  - {date: 2026-09-02, name: "Quốc khánh", verified: true}

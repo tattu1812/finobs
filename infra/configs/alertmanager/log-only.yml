@@ -1,0 +1,6 @@
+# Chưa có token Telegram: nhận alert từ Prometheus nhưng không gửi đi đâu (xem tại http://localhost:9093).
+route:
+  receiver: log-only
+  group_by: [alertname]
+receivers:
+  - name: log-only

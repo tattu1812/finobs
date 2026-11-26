@@ -1,0 +1,65 @@
+# Mô phỏng sai đơn vị giá (nhân 1000) ở Coinbase BTC-USD (FT09); không khẳng định sự cố thật ở sàn.
+scenario_version: 2
+id: S005_coinbase_price_unit
+title: Mô phỏng giá BTC-USD của Coinbase bị nhân 1000 trong 3 phút
+fault_type: FT09_value_anomaly
+severity: critical
+description: >
+  Từ phút thứ 8, giá mọi trade BTC-USD của Coinbase bị nhân 1000 trong 3 phút, như lỗi quy đổi
+  đơn vị. Binance BTCUSDT (cùng tài sản, cùng cửa sổ) vẫn đúng, nên chỉ MỘT nguồn lệch: đây là
+  ca detector đối chứng chéo (C1) phải gọi là sự cố dữ liệu, không phải sự kiện thị trường.
+tags: [value, coinbase, cross_source]
+input:
+  mode: replay
+  dataset: data/raw
+  sources: [coinbase, binance]
+  symbols: [BTC-USD, BTCUSDT]
+  window:
+    start: "2026-10-27T03:00:00.000Z"
+    end: "2026-10-27T03:20:00.000Z"
+  seed: 5
+injection:
+  injector: scale_price
+  target:
+    layer: source
+    asset: "finobs:raw.coinbase.trade"
+    source: coinbase
+    symbols: [BTC-USD]
+  start_offset_s: 480          # 03:08:00
+  duration_s: 180
+  params:
+    factor: 1000
+ground_truth:
+  is_incident: true
+  fault_type: FT09_value_anomaly
+  start_offset_s: 480
+  end_offset_s: 660
+  root_cause:
+    asset: "finobs:raw.coinbase.trade"
+    component: điểm tiêm scale_price trên luồng đầu vào Coinbase BTC-USD
+    explanation: >
+      Benchmark nhân giá Coinbase BTC-USD với 1000; Binance cùng tài sản không đổi. Lợi suất 1 phút
+      của Coinbase nhảy mạnh trong khi Binance phẳng, và độ lệch giá liên sàn tăng vọt.
+  affected_assets:
+    - "finobs:raw.coinbase.trade"
+    - "finobs:silver.trades"
+    - "finobs:gold.ohlcv_1m"
+    - "finobs:gold.cross_exchange_spread"
+  expected_signals:
+    - metric: cross_source_spread_bps
+      group: { symbol_std: BTC/USD }
+      direction: up
+      catalog_status: in_catalog
+    - metric: return_1m_bps
+      group: { source: coinbase, symbol_std: BTC/USD }
+      direction: shift
+      catalog_status: in_catalog
+      note: nhảy lên khi bắt đầu tiêm và rơi xuống khi kết thúc
+  must_not_alert:
+    - metric: return_1m_bps
+      group: { source: binance, symbol_std: BTC/USD }
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 600
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

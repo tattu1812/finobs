@@ -7,3 +7,5 @@ RUN pip install --no-cache-dir "apache-airflow==2.10.5" "pyiceberg[pyarrow]==0.8
 
 COPY --chown=airflow:root config/ /opt/finobs/config/
 COPY --chown=airflow:root platform/batch/ /opt/finobs/platform/batch/
+COPY --chown=airflow:root platform/lineage.py /opt/finobs/platform/lineage.py
+COPY --chown=airflow:root observability/collectors/trino_client.py /opt/finobs/observability/collectors/trino_client.py

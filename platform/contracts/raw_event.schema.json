@@ -31,7 +31,7 @@
     },
     "source": {
       "type": "string",
-      "enum": ["binance", "coinbase", "vnstock"]
+      "enum": ["binance", "coinbase", "kraken", "vnstock"]
     },
     "symbol_native": {
       "description": "Mã đúng như sàn viết, giữ nguyên để truy ngược.",
@@ -56,7 +56,7 @@
       "$ref": "#/$defs/utc_ms"
     },
     "sequence": {
-      "description": "Số thứ tự trade của sàn (Binance t, Coinbase trade_id, VCI id).",
+      "description": "Số thứ tự trade của sàn (Binance t, Coinbase trade_id, Kraken trade_id, VCI id).",
       "type": "integer",
       "minimum": 0
     },

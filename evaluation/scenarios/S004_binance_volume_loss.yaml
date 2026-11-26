@@ -1,0 +1,62 @@
+# Mô phỏng mất 30% trade Binance BTCUSDT trong 5 phút (FT02); không khẳng định sự cố thật ở sàn.
+scenario_version: 2
+id: S004_binance_volume_loss
+title: Mô phỏng mất 30% trade BTCUSDT ở đầu vào Binance trong 5 phút
+fault_type: FT02_volume_loss
+severity: high
+description: >
+  Từ phút thứ 5, bỏ ngẫu nhiên 30% trade BTCUSDT của Binance trong 5 phút (seed cố định).
+  Nguồn vẫn gửi đủ, phần mất xảy ra trên đường thu nhận, nên số trade giảm trong khi giá và
+  các sàn khác vẫn bình thường. Trade ID của Binance tăng liên tục, nên phần bị bỏ còn lộ ra
+  thành khoảng hở ID (đối soát C2) và lệch so với file chính thức ngày hôm sau.
+tags: [volume, binance, reconciliation]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT, ETHUSDT]
+  window:
+    start: "2026-10-27T03:00:00.000Z"
+    end: "2026-10-27T03:20:00.000Z"
+  seed: 4
+injection:
+  injector: drop_records
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300          # 03:05:00
+  duration_s: 300
+  params:
+    fraction: 0.3
+ground_truth:
+  is_incident: true
+  fault_type: FT02_volume_loss
+  start_offset_s: 300
+  end_offset_s: 600
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: điểm tiêm drop_records trên luồng đầu vào Binance BTCUSDT
+    explanation: >
+      Benchmark chủ động bỏ 30% trade BTCUSDT. ETHUSDT không bị tác động, nên detector cần
+      phân biệt "mất dữ liệu ở một mã" với biến động khối lượng chung của thị trường.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+    - "finobs:silver.trades"
+    - "finobs:gold.ohlcv_1m"
+  expected_signals:
+    - metric: trade_count_1m
+      group: { source: binance, symbol_canonical: BTC-USDT }
+      direction: down
+      catalog_status: in_catalog
+      note: giảm khoảng 30% so với baseline trước phút thứ 5
+  must_not_alert:
+    - metric: trade_count_1m
+      group: { source: binance, symbol_canonical: ETH-USDT }
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 600
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

@@ -8,6 +8,7 @@ Contract cho tầng raw: các file NDJSON nén gzip do `platform/ingest/*` ghi v
 | `raw_event.schema.json` | Vỏ (envelope) chung. Mọi nguồn đều phải tuân thủ. |
 | `binance_trade.schema.json` | Bản ghi `source = "binance"`: vỏ chung (`allOf`) cộng thêm ràng buộc cho payload stream `<symbol>@trade`. |
 | `coinbase_trade.schema.json` | Bản ghi `source = "coinbase"`: vỏ chung cộng thêm ràng buộc cho payload kênh `market_trades`. |
+| `kraken_trade.schema.json` | Bản ghi `source = "kraken"` (từ 1.1.0): vỏ chung cộng thêm ràng buộc cho payload kênh `trade` của WebSocket v2. Sàn gửi giá/khối lượng là **số JSON**; producer đọc nguyên văn thành chuỗi (`parse_float=str`) nên không làm tròn. |
 | `validate.py` | Kiểm tra mọi bản ghi theo schema của nguồn tương ứng, và chạy thêm 3 kiểm tra chéo trường. |
 
 Chuẩn dùng: **JSON Schema draft 2020-12**. Các schema tham chiếu nhau qua `$id`
@@ -131,7 +132,7 @@ Nói rõ để không hiểu nhầm "100% hợp lệ" là dữ liệu "sạch":
 ## Versioning
 
 Phiên bản contract được ghi trong **mỗi bản ghi**: `schema_version` (SemVer). Recorder lấy giá trị này từ
-`platform/ingest/common.py::SCHEMA_VERSION`. Phiên bản hiện tại: **1.0.0**.
+`platform/ingest/common.py::SCHEMA_VERSION`. Phiên bản hiện tại: **1.1.0**.
 
 | Loại thay đổi | Ví dụ | Tăng |
 |---|---|---|
@@ -151,6 +152,7 @@ Quy tắc:
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0.0 | 2026-10-27 | Bản đầu tiên: vỏ, Binance trade, Coinbase trade. `transport` gồm `is_snapshot`, `poll_interval_s`, `rows_returned`. |
+| 1.1.0 | 2026-11-25 | Thêm nguồn `kraken` (enum `source`, `kraken_trade.schema.json`) làm nguồn thứ ba cho đối chứng chéo C1. MINOR: bản ghi 1.0.0 vẫn hợp lệ. |
 
 ## Việc còn mở
 

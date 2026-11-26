@@ -14,22 +14,34 @@ Biến môi trường:
   KAFKA_TOPIC_PATTERN   mặc định raw\\.[a-z]+\\.trade  (không đọc raw.dlq)
   BRONZE_TABLE          mặc định iceberg.bronze.trades_raw
   CHECKPOINT_DIR        mặc định /checkpoints/bronze_trades
-  TRIGGER_SECONDS       mặc định 15
+  TRIGGER_SECONDS       mặc định 60 (S2 dùng 15 s sinh ~9.500 file/ngày; 60 s giảm 4 lần)
   MINIO_ROOT_USER / MINIO_ROOT_PASSWORD  khóa S3 cho catalog iceberg
 """
 
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+
+HERE = Path(__file__).resolve().parent
+sys.path[:0] = [str(HERE), str(HERE.parent)]  # progress_exporter (cùng thư mục), lineage (platform/)
+from lineage import LineageEmitter  # noqa: E402
+from progress_exporter import ProgressExporter  # noqa: E402
+
+METRICS_PORT = int(os.environ.get("METRICS_PORT", "9108"))
+# Topic đọc vào, ghi vào lineage đúng tên topic (docs/conventions/lineage-naming.md).
+INPUT_TOPICS = [t.strip() for t in os.environ.get(
+    "LINEAGE_INPUT_TOPICS", "raw.binance.trade,raw.coinbase.trade,raw.kraken.trade,raw.vnstock.trade").split(",")]
 
 BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP", "kafka:29092")
 TOPIC_PATTERN = os.environ.get("KAFKA_TOPIC_PATTERN", r"raw\.[a-z]+\.trade")
 TABLE = os.environ.get("BRONZE_TABLE", "iceberg.bronze.trades_raw")
 CHECKPOINT = os.environ.get("CHECKPOINT_DIR", "/checkpoints/bronze_trades")
-TRIGGER = f"{int(os.environ.get('TRIGGER_SECONDS', '15'))} seconds"
+TRIGGER = f"{int(os.environ.get('TRIGGER_SECONDS', '60'))} seconds"
 
 DDL = f"""
 CREATE TABLE IF NOT EXISTS {TABLE} (
@@ -102,9 +114,16 @@ def main() -> None:
         .load()
     )
 
+    exporter = ProgressExporter(port=METRICS_PORT).start()
+    spark.streams.addListener(exporter.listener())
+    lineage = LineageEmitter.from_env()
+    # Python của image Spark là 3.8: không có str.removeprefix.
+    run = lineage.start("bronze_trades", inputs=INPUT_TOPICS, outputs=[TABLE.split(".", 1)[1]], streaming=True)
+
     query = (
         bronze_columns(kafka)
         .writeStream.format("iceberg")
+        .queryName("bronze_trades")
         .outputMode("append")
         .trigger(processingTime=TRIGGER)
         .option("checkpointLocation", CHECKPOINT)
@@ -112,7 +131,12 @@ def main() -> None:
         .toTable(TABLE)
     )
     print(f"bronze_trades: {TOPIC_PATTERN} -> {TABLE}, trigger {TRIGGER}", flush=True)
-    query.awaitTermination()
+    try:
+        query.awaitTermination()
+        lineage.complete(run)
+    except Exception as exc:
+        lineage.fail(run, repr(exc))
+        raise
 
 
 if __name__ == "__main__":

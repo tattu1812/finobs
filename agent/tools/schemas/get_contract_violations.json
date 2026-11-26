@@ -6,7 +6,7 @@
     "additionalProperties": false,
     "required": ["source", "start", "end"],
     "properties": {
-      "source": { "enum": ["binance", "coinbase", "vnstock"] },
+      "source": { "enum": ["binance", "coinbase", "kraken", "vnstock"] },
       "start": { "$ref": "#/$defs/utc_ms" },
       "end": { "$ref": "#/$defs/utc_ms" },
       "sample_limit": { "type": "integer", "minimum": 0, "maximum": 50, "default": 5 }

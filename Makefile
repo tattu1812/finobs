@@ -1,11 +1,13 @@
 COMPOSE = docker compose --env-file .env -f infra/docker-compose.yml
+# Mọi profile: dùng cho build/down/stop/ps/logs để không sót service nào.
+COMPOSE_ALL = $(COMPOSE) --profile ops --profile timesync
 
 # Ingest. Luôn chạy script bằng đường dẫn file: thư mục platform/ trùng tên module chuẩn.
 VENV        := .venv
 PY          ?= $(VENV)/bin/python
 RAW         ?= data/raw
 MINUTES     ?= 60
-SOURCES     ?= binance,coinbase
+SOURCES     ?= binance,coinbase,kraken
 VALIDATE_IN ?= $(if $(wildcard $(RAW)/*/*/*.jsonl.gz),$(RAW),tests/fixtures/raw)
 # Ngày file chính thức Binance cần nạp (mặc định: hôm qua theo UTC)
 DATE        ?= $(shell date -u -d yesterday +%F 2>/dev/null)
@@ -19,13 +21,16 @@ TRINO = docker exec finobs-trino trino --output-format ALIGNED --execute
 
 .PHONY: help check build up down stop restart ps logs venv clock-check record analyze \
 	validate-contracts validate-scenarios test test-agent test-observability test-platform \
-	lineage bronze-check official-check load-official
+	lineage bronze-check official-check load-official up-core timesync reprocess gold-check \
+	completeness-check bench test-spark
 
 help:
 	@echo "FinObs commands:"
 	@echo "  make check   - Validate Docker Compose"
 	@echo "  make build   - Build image finobs-app, finobs-spark, finobs-airflow"
-	@echo "  make up      - Build (nếu cần) và khởi chạy toàn bộ dịch vụ"
+	@echo "  make up      - Build (nếu cần) và chạy lõi + profile ops (Airflow, Marquez, Grafana)"
+	@echo "  make up-core - Chỉ phần lõi: thu, bronze/silver/gold, metric, alert (máy ít RAM)"
+	@echo "  make timesync - Đồng bộ giờ máy ảo Docker Desktop bằng NTP (không dùng trên máy chủ Linux)"
 	@echo "  make down    - Stop and remove containers (giữ volume)"
 	@echo "  make stop    - Stop services"
 	@echo "  make restart - Restart services"
@@ -36,6 +41,10 @@ help:
 	@echo "  make bronze-check       - Trino: dữ liệu live mới nhất trên bronze.trades_raw"
 	@echo "  make load-official      - Nạp file chính thức Binance ngày DATE=$(DATE) (trong container Airflow)"
 	@echo "  make official-check     - Trino: số trade và dãy ID của bronze.binance_official_trades"
+	@echo "  make reprocess          - Dừng silver-gold, tính lại silver/gold từ đầu bronze (FROM=, TO= tùy chọn)"
+	@echo "  make gold-check         - Gold có tính đúng không: đếm lại từ silver, phải khớp 100%"
+	@echo "  make completeness-check - Stream có đủ không: gold Binance so với file chính thức ngày DATE (chỉ số C2)"
+	@echo "  make bench              - Chạy injector trên mọi scenario (ra bench/, BENCH_DSN= để ghi bench.scenarios)"
 	@echo ""
 	@echo "Ingest (chạy trên máy, ra file):"
 	@echo "  make venv               - Tạo .venv và cài requirements-ingest.txt + requirements-test.txt"
@@ -49,32 +58,39 @@ help:
 	@echo "  make test               - Chạy mọi unit test"
 	@echo "  make test-platform      - Producer (Kafka writer) + bộ nạp file chính thức"
 	@echo "  make test-observability - Collector trade_count, freshness, vòng chạy liên tục"
-	@echo "  make test-agent         - 5 tool agent (dữ liệu giả, Marquez, metric store)"
+	@echo "  make test-agent         - 5 tool agent, RCA heuristic"
+	@echo "  make test-spark         - Logic silver/gold trên Spark local (trong image finobs-spark)"
 	@echo "  make lineage            - In đồ thị lineage (MARQUEZ_URL=http://localhost:5000 để dùng Marquez thật)"
 
 check:
 	$(COMPOSE) config --quiet
 
 build:
-	$(COMPOSE) build
+	$(COMPOSE_ALL) build
 
 up:
+	$(COMPOSE) --profile ops up -d --build
+
+up-core:
 	$(COMPOSE) up -d --build
 
+timesync:
+	$(COMPOSE) --profile timesync up -d timesync
+
 down:
-	$(COMPOSE) down
+	$(COMPOSE_ALL) down
 
 stop:
-	$(COMPOSE) stop
+	$(COMPOSE_ALL) stop
 
 restart:
 	$(COMPOSE) restart
 
 ps:
-	$(COMPOSE) ps
+	$(COMPOSE_ALL) ps
 
 logs:
-	$(COMPOSE) logs -f --tail=100
+	$(COMPOSE_ALL) logs -f --tail=100
 
 venv: $(VENV)/.installed
 
@@ -99,13 +115,20 @@ validate-contracts: $(PY_DEP)
 test: test-platform test-observability test-agent
 
 test-platform: $(PY_DEP)
-	$(PY) -m unittest tests.test_producer_sinks tests.test_binance_official -v
+	$(PY) -m unittest tests.test_producer_sinks tests.test_kraken_adapter tests.test_binance_official \
+	  tests.test_injector -v
 
 test-agent: $(PY_DEP)
-	$(PY) -m unittest tests.test_agent_tools tests.test_metric_store -v
+	$(PY) -m unittest tests.test_agent_tools tests.test_metric_store tests.test_rca_heuristic -v
 
 test-observability: $(PY_DEP)
-	$(PY) -m unittest tests.test_trade_count_collector tests.test_freshness_collector -v
+	$(PY) -m unittest tests.test_trade_count_collector tests.test_freshness_collector \
+	  tests.test_trading_calendar tests.test_pipeline_health -v
+
+# Logic silver/gold cần Spark: chạy trong image finobs-spark (có pyspark), mount repo chỉ đọc.
+test-spark:
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo -e PYTHONDONTWRITEBYTECODE=1 finobs-spark:local \
+	  sh -c 'PYTHONPATH=/opt/spark/python:$$(ls /opt/spark/python/lib/py4j-*.zip) python3 -m unittest tests.test_silver_gold -v'
 
 lineage: $(PY_DEP)
 	$(PY) -m agent.tools.lineage_graph --alerts $(if $(MARQUEZ_URL),--marquez-url $(MARQUEZ_URL))
@@ -130,3 +153,38 @@ official-check:
 	$(TRINO) "SELECT file_date, symbol, count(*) AS rows, max(trade_id) - min(trade_id) + 1 AS id_span, \
 	  count(DISTINCT checksum) AS files FROM iceberg.bronze.binance_official_trades \
 	  GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC"
+
+# Tính lại silver/gold từ đầu bronze (cùng code với chế độ stream, MERGE idempotent).
+reprocess:
+	$(COMPOSE) stop silver-gold
+	$(COMPOSE) run --rm --no-deps silver-gold sh -c '/opt/spark/bin/spark-submit \
+	  --master spark://spark-master:7077 --conf spark.driver.host=$$(hostname -i) \
+	  --conf spark.driver.memory=768m --conf spark.executor.memory=1g --conf spark.cores.max=1 \
+	  --conf spark.sql.shuffle.partitions=4 /opt/finobs/platform/streaming/silver_gold.py --mode rebuild \
+	  $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO))'
+	$(COMPOSE) start silver-gold
+
+# Gold có tính đúng không: đếm lại từ silver, phải khớp 100% (mismatched_minutes = 0).
+gold-check:
+	$(TRINO) "WITH s AS (SELECT source, symbol_std, date_trunc('minute', event_ts) AS minute, count(*) AS n, \
+	  sum(qty) AS volume FROM iceberg.silver.trades GROUP BY 1, 2, 3) \
+	  SELECT count(*) AS minutes_checked, \
+	  count_if(g.trade_count IS DISTINCT FROM s.n OR g.volume IS DISTINCT FROM s.volume) AS mismatched_minutes \
+	  FROM s FULL JOIN iceberg.gold.ohlcv_1m g \
+	  ON g.source = s.source AND g.symbol_std = s.symbol_std AND g.minute = s.minute \
+	  WHERE coalesce(g.minute, s.minute) < current_timestamp - INTERVAL '15' MINUTE"
+
+# Stream có đủ không (chỉ số C2, S4): gold Binance so với file chính thức theo giờ của ngày DATE.
+completeness-check:
+	$(TRINO) "WITH o AS (SELECT symbol, date_trunc('hour', trade_ts) AS hour, count(*) AS official \
+	  FROM iceberg.bronze.binance_official_trades WHERE file_date = DATE '$(DATE)' GROUP BY 1, 2), \
+	  s AS (SELECT replace(symbol_canonical, '-', '') AS symbol, date_trunc('hour', minute) AS hour, \
+	  sum(trade_count) AS stream FROM iceberg.gold.ohlcv_1m WHERE source = 'binance' \
+	  AND minute >= TIMESTAMP '$(DATE) 00:00:00 UTC' AND minute < TIMESTAMP '$(DATE) 00:00:00 UTC' + INTERVAL '1' DAY \
+	  GROUP BY 1, 2) \
+	  SELECT o.symbol, count(*) AS hours, sum(o.official) AS official, sum(coalesce(s.stream, 0)) AS stream, \
+	  round(100.0 * sum(coalesce(s.stream, 0)) / sum(o.official), 3) AS completeness_pct \
+	  FROM o LEFT JOIN s ON s.symbol = o.symbol AND s.hour = o.hour GROUP BY 1 ORDER BY 1"
+
+bench: $(PY_DEP)
+	$(PY) evaluation/injector/inject.py evaluation/scenarios/S0*.yaml --out bench $(if $(BENCH_DSN),--dsn $(BENCH_DSN))

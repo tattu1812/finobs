@@ -79,15 +79,18 @@ metrics:
 
   - name: trade_size_p95_5m
     pillar: distribution
-    description: "Phân vị 95% kích thước trade live nhận trong 5 phút."
+    description: "Phân vị 95% kích thước trade trong 5 phút (S3: tính từ silver.trades)."
     group_by: [source, symbol_canonical]
-    value_field_by_source:
+    input: silver.trades
+    value_field: qty
+    value_field_by_source_in_raw:
       binance: payload.q
       coinbase: payload.size
+      kraken: payload.qty
     numeric_type: decimal
-    filter: "transport.is_snapshot is absent or false"
-    deduplicate_by: event_id
-    formula: "p95(size) theo cửa sổ ingest_time 5 phút"
+    filter: "silver đã khử trùng theo (source, symbol, trade_id) và bỏ bản ghi trễ > 10 phút"
+    formula: "approx_percentile(qty, 0.95) theo cửa sổ event_ts 5 phút, kết thúc 2 phút trước mốc tính"
+    implemented_in: observability/collectors/table_metrics.py
     window: "5m"
     compute_every: "1m"
     unit: base_asset_units
@@ -95,12 +98,13 @@ metrics:
     include_sample_count: true
   - name: contract_violation_count_1m
     pillar: schema
+    implemented_in: observability/collectors/run_loop.py (S3)
     description: "Số bản ghi raw không đạt contract trong một phút."
     input: validation_result
     group_by: [source]
     required_result_fields: [checked_at, source, is_valid]
     formula: "count(records where is_valid == false)"
-    window_by: checked_at
+    window_by: "phút ingest_time của bản ghi (tất định khi tính lại; collector kiểm lại contract từ file raw)"
     window: "1m"
     compute_every: "1m"
     unit: records
@@ -108,12 +112,13 @@ metrics:
 
   - name: contract_violation_rate_1m
     pillar: schema
+    implemented_in: observability/collectors/run_loop.py (S3)
     description: "Tỷ lệ bản ghi raw không đạt contract trong một phút."
     input: validation_result
     group_by: [source]
     required_result_fields: [checked_at, source, is_valid]
     formula: "count(is_valid == false) / count(all records checked)"
-    window_by: checked_at
+    window_by: "phút ingest_time của bản ghi (tất định khi tính lại; collector kiểm lại contract từ file raw)"
     window: "1m"
     compute_every: "1m"
     unit: ratio
@@ -167,3 +172,66 @@ metrics:
     when_either_source_missing: null
     when_any_price_is_zero: null
     status: needs_pair_mapping_and_baseline
+
+  # ------------------------------------------------------------------ Sprint 3
+  - name: table_freshness_seconds
+    pillar: lineage
+    description: "Tuổi snapshot mới nhất của một bảng Iceberg trong pipeline: bảng phía sau cũ dần khi job phía trước lỗi."
+    group_by: [asset]
+    input: "iceberg.<namespace>.<table>$snapshots (qua Trino)"
+    assets: [bronze.trades_raw, bronze.binance_official_trades, silver.trades, gold.ohlcv_1m, gold.cross_exchange_spread]
+    formula: "observed_at - max(committed_at)"
+    compute_every: "1m"
+    unit: seconds
+    when_table_missing: null
+    implemented_in: observability/collectors/table_metrics.py
+
+  - name: return_1m_bps
+    pillar: distribution
+    description: "Lợi suất giá đóng cửa của phút so với phút trước, theo nguồn (đầu vào của detector C1)."
+    group_by: [source, symbol_std]
+    input: gold.ohlcv_1m
+    formula: "(close_t / close_(t-1) - 1) * 10000"
+    window: "1m"
+    compute_every: "1m"
+    settle_minutes: 2
+    unit: basis_points
+    when_previous_minute_missing: null
+    implemented_in: observability/collectors/table_metrics.py
+
+  - name: cross_source_spread_bps
+    pillar: cross_source
+    description: "Độ lệch giá đóng cửa giữa các sàn cho cùng tài sản; Binance định giá USDT nên có cả chênh USDT/USD."
+    group_by: [symbol_std]
+    input: gold.cross_exchange_spread
+    formula: "(max(close) - min(close)) / median(close) * 10000, cần ít nhất 2 sàn"
+    window: "1m"
+    compute_every: "1m"
+    settle_minutes: 2
+    unit: basis_points
+    when_fewer_than_two_sources: null
+    implemented_in: observability/collectors/table_metrics.py
+
+  - name: trading_freshness_seconds
+    pillar: freshness
+    description: "Số GIÂY GIAO DỊCH kể từ trade live cuối của mã cổ phiếu VN; nghỉ trưa, cuối tuần, ngày lễ không tính (C2)."
+    group_by: [source, symbol_canonical]
+    calendar: config/trading_calendar.yaml (HOSE)
+    formula: "trading_seconds_between(max(ingest_time), observed_at)"
+    compute_every: "1m"
+    unit: trading_seconds
+    when_no_trade_and_market_closed: null
+    when_no_trade_and_market_open: "tính từ đầu phiên hôm nay"
+    implemented_in: observability/slo/trading_calendar.py
+
+# Pipeline health (S3): metric Prometheus, không ghi vào metric store.
+pipeline_health_prometheus:
+  - {name: finobs_stream_offsets_behind_latest, labels: [query, stat], meaning: "Kafka consumer lag của job Spark (min/avg/max offset chưa đọc)", from: platform/streaming/progress_exporter.py}
+  - {name: finobs_stream_batch_duration_ms, labels: [query], meaning: "thời gian micro-batch gần nhất", from: platform/streaming/progress_exporter.py}
+  - {name: finobs_stream_last_progress_timestamp_seconds, labels: [query], meaning: "lần cuối job có tiến độ (alert StreamStalled)", from: platform/streaming/progress_exporter.py}
+  - {name: finobs_silver_late_rows_total, labels: [source], meaning: "bản ghi bị bỏ khỏi silver vì trễ quá 10 phút", from: platform/streaming/silver_gold.py}
+  - {name: finobs_gold_last_minute_timestamp_seconds, labels: [], meaning: "phút gold mới nhất được tính (alert GoldStale)", from: platform/streaming/silver_gold.py}
+  - {name: finobs_airflow_dag_last_run_success, labels: [dag_id], meaning: "lượt chạy DAG gần nhất thành công (1) hay thất bại (0)", from: observability/collectors/pipeline_exporter.py}
+  - {name: finobs_producer_records_total, labels: [source, result], meaning: "bản ghi producer gửi, hợp lệ / vi phạm contract", from: platform/ingest/sinks.py}
+  - {name: finobs_producer_ws_events_total, labels: [source, kind], meaning: "kết nối, mất kết nối WebSocket (thay cho recorder_disconnect_count_5m)", from: platform/ingest/sinks.py}
+  - {name: finobs_producer_clock_offset_ms, labels: [], meaning: "lệch đồng hồ NTP của máy producer", from: platform/ingest/produce.py}
