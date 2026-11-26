@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S009_binance_volume_loss_light
+title: Binance ETHUSDT rơi nhẹ 10% trade trong 2 phút (FT02)
+fault_type: FT02_volume_loss
+severity: medium
+description: >
+  Mô phỏng mất 10% trade ở mức nhẹ trên Binance ETHUSDT trong 120 giây
+  để kiểm tra độ nhạy phát hiện khoảng hở trade_id khi volume giảm vừa phải.
+tags: [sprint5, binance, volume_loss]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [ETHUSDT]
+  window:
+    start: "2026-10-27T07:00:00.000Z"
+    end: "2026-10-27T07:30:00.000Z"
+  seed: 9
+injection:
+  injector: drop_fraction
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [ETHUSDT]
+  start_offset_s: 360
+  duration_s: 120
+  params:
+    fraction: 0.1
+ground_truth:
+  is_incident: true
+  fault_type: FT02_volume_loss
+  start_offset_s: 360
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: producer Binance ETHUSDT
+    explanation: >
+      Mất 10% bản ghi ở tốc độ thấp tạo các khoảng hở nhỏ trên trade_id.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_id_gap_missing_total
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

@@ -1,0 +1,53 @@
+scenario_version: 2
+id: S006_binance_stale_feed_btcusdt
+title: Binance BTCUSDT mất luồng hoàn toàn trong 3 phút (FT01)
+fault_type: FT01_stale_feed
+severity: high
+description: >
+  Mô phỏng mất kết nối WebSocket Binance đối với cặp BTCUSDT trong 180 giây,
+  khiến không có trade nào được ghi nhận ở raw và bronze trong cửa sổ sự cố.
+tags: [sprint5, binance, stale_feed]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T04:00:00.000Z"
+    end: "2026-10-27T04:30:00.000Z"
+  seed: 6
+injection:
+  injector: drop_window
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 180
+  params:
+    mode: full_stop
+ground_truth:
+  is_incident: true
+  fault_type: FT01_stale_feed
+  start_offset_s: 300
+  end_offset_s: 480
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: producer WebSocket Binance cho BTCUSDT
+    explanation: >
+      Luồng Binance BTCUSDT bị ngắt hoàn toàn trong 3 phút tại điểm tiêm lỗi,
+      dẫn tới trade_count_1m giảm về 0 và freshness lag tăng vượt ngưỡng SLO.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: trade_count_1m
+      group: { source: binance }
+      direction: down
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

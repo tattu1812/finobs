@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S017_binance_value_anomaly_ethusdt
+title: Binance ETHUSDT nhân giá x1000 trong 3 phút (FT09)
+fault_type: FT09_value_anomaly
+severity: high
+description: >
+  Mô phỏng giá ETHUSDT từ Binance bị phóng đại x1000 trong 180 giây,
+  phục vụ đánh giá độ nhạy của baseline z-score và historical bounds.
+tags: [sprint5, binance, value_anomaly]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [ETHUSDT]
+  window:
+    start: "2026-10-27T15:00:00.000Z"
+    end: "2026-10-27T15:30:00.000Z"
+  seed: 17
+injection:
+  injector: scale_value
+  target:
+    layer: source
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [ETHUSDT]
+  start_offset_s: 360
+  duration_s: 180
+  params:
+    multiplier: 1000
+ground_truth:
+  is_incident: true
+  fault_type: FT09_value_anomaly
+  start_offset_s: 360
+  end_offset_s: 540
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: nguồn Binance ETHUSDT
+    explanation: >
+      Giá ETHUSDT bị nhân x1000 làm vượt xa biên phân vị lịch sử.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:silver.trades"
+  expected_signals:
+    - metric: price_sketch_p95_1m
+      group: { source: binance }
+      direction: up
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]

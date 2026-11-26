@@ -1,0 +1,52 @@
+scenario_version: 2
+id: S014_binance_clock_skew_host
+title: Binance BTCUSDT lệch đồng hồ -3 giây (FT06)
+fault_type: FT06_clock_skew
+severity: medium
+description: >
+  Mô phỏng sai lệch NTP -3000ms trên host chạy producer Binance BTCUSDT,
+  gây đảo dấu độ trễ giữa event_time và ingest_time.
+tags: [sprint5, binance, clock_skew]
+input:
+  mode: replay
+  dataset: data/raw/binance/2026-10-27
+  sources: [binance]
+  symbols: [BTCUSDT]
+  window:
+    start: "2026-10-27T12:00:00.000Z"
+    end: "2026-10-27T12:30:00.000Z"
+  seed: 14
+injection:
+  injector: skew_clock
+  target:
+    layer: host
+    asset: "finobs:raw.binance.trade"
+    source: binance
+    symbols: [BTCUSDT]
+  start_offset_s: 300
+  duration_s: 240
+  params:
+    offset_ms: -3000
+ground_truth:
+  is_incident: true
+  fault_type: FT06_clock_skew
+  start_offset_s: 300
+  end_offset_s: 540
+  root_cause:
+    asset: "finobs:raw.binance.trade"
+    component: đồng hồ host chạy producer Binance
+    explanation: >
+      Lệch NTP làm ingest_time sớm hơn event_time 3 giây.
+  affected_assets:
+    - "finobs:raw.binance.trade"
+    - "finobs:bronze.trades_raw"
+  expected_signals:
+    - metric: ingest_delay_p95_ms
+      group: { source: binance }
+      direction: shift
+      catalog_status: in_catalog
+evaluation:
+  detect_within_s: 120
+  diagnose_within_s: 300
+  rca_top_k: 3
+  metrics: [MTTD, MTTDiag, precision, recall, AC@k]
