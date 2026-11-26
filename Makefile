@@ -22,7 +22,7 @@ TRINO = docker exec finobs-trino trino --output-format ALIGNED --execute
 .PHONY: help check build up down stop restart ps logs venv clock-check record analyze \
 	validate-contracts validate-scenarios test test-agent test-observability test-platform test-reconcile \
 	lineage bronze-check official-check load-official up-core timesync reprocess gold-check \
-	completeness-check bench test-spark reconcile
+	completeness-check bench test-spark reconcile replay
 
 help:
 	@echo "FinObs commands:"
@@ -205,3 +205,10 @@ reconcile: $(PY_DEP)
 	  $(if $(SYMBOLS),--symbols $(SYMBOLS)) \
 	  $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO)) \
 	  $(if $(FIXTURE_DIR),--fixture-dir $(FIXTURE_DIR))
+
+replay: $(PY_DEP)
+	$(PY) infra/replay/replayer.py --in $(or $(IN),tests/fixtures/raw) \
+	  --speed $(or $(SPEED),max) --namespace $(or $(NAMESPACE),replay) \
+	  $(if $(SYMBOLS),--symbols $(SYMBOLS)) $(if $(NUM_SYMBOLS),--num-symbols $(NUM_SYMBOLS)) \
+	  $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO)) \
+	  $(if $(SEED),--seed $(SEED)) $(if $(OUT),--out $(OUT))
