@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 from observability.detectors.historical_bounds import HistoricalBoundsDetector
 from observability.detectors.run_baseline import run_detectors

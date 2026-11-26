@@ -103,3 +103,51 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Backfill C2 (`observability/reconcile/backfill.py`)**: xuất `reports/reconcile/YYYY-MM-DD.{md,json}` và `coverage_summary.{md,json}`.
 - **Trạng thái ngày đối soát**: `OK`, `MISSING_IN_STREAM`, `EXTRA_IN_STREAM`, `VALUE_MISMATCH`, `INCOMPLETE_DAY` (ngày thu dở dang), `OFFICIAL_NOT_AVAILABLE` (chưa có file chính thức).
 - **Đo M3 (`observability/reconcile/measure_m3.py`)**: trả về `m3_gap_detect_latency_seconds` (< 60 s) và `m3_report_rate` (= 1.0).
+
+---
+
+## OB (Sprint 5) — Detector Interface & Baseline Detectors
+
+- **Interface chung (`observability/detectors/base.py`)**: `BaseDetector.detect(observations) -> list[DetectorAlert]`.
+  - `DetectorAlert`: `{detector, source, symbol, ts, detected_at, asset, score, severity, evidence, metric, labels}` — tương thích trực tiếp với `evaluation/bench/mttd_harness.py`.
+- **Hai baseline**:
+  - `ZScoreSingleSourceDetector` (`observability/detectors/zscore_single.py`): rolling z-score đơn nguồn (hỗ trợ `robust_mad`, warm-up `min_samples`, chống ô nhiễm cửa sổ, xử lý `std == 0` và `None`).
+  - `HistoricalBoundsDetector` (`observability/detectors/historical_bounds.py`): dùng `KLLSketch` học phân vị `[lower_quantile, upper_quantile]` có nới biên `margin_factor`, tách biệt `fit()` và `detect()`.
+- **Cấu hình**: [`config/detectors.yaml`](../config/detectors.yaml).
+- **CLI**: `python observability/detectors/run_baseline.py --input <obs.json> --detector both`.
+
+---
+
+## AI (Sprint 5) — Agent Chẩn đoán RCA v1 (ReAct + 5 Read-Only Tools)
+
+- **5 Tool chỉ-đọc (`agent/tools/readonly_tools.py`)**: `read_metrics`, `read_lineage`, `query_table`, `read_incident`, `read_config`.
+  - `query_table`: chỉ cho phép 1 câu lệnh `SELECT` trên allowlist bảng, `LIMIT <= 100`.
+  - `read_config`: chỉ đọc trong `config/` và contract/catalog YAML, chặn `.env` và path traversal.
+- **Đầu ra chẩn đoán (`agent/react_agent.py`)**:
+  ```json
+  {
+    "incident_id": "INC-S002",
+    "prompt_version": "v1.0.0",
+    "status": "completed",
+    "hypotheses": [
+      {
+        "rank": 1,
+        "root_cause": "...",
+        "suspected_asset": "finobs:raw.binance.trade",
+        "confidence": 0.9,
+        "evidence": [{"call_id": "call_001", "tool": "read_incident", "excerpt": "..."}],
+        "suggested_remediation_text": "..."
+      }
+    ]
+  }
+  ```
+- **Biến môi trường LLM (`.env.example`)**: `FINOBS_LLM_API_KEY`, `FINOBS_LLM_BASE_URL`, `FINOBS_LLM_MODEL`.
+
+---
+
+## EV (Sprint 5) — Baseline Suite, M2–M6 Targets & FinObs-Bench Expansion
+
+- **Baseline Runner (`evaluation/bench/run_sprint5_baseline.py`)**: kết hợp `injector_v2`, detector baseline (giao diện `DetectorAlert` của OB, tự fallback sang stub nếu OB chưa merge) và `mttd_harness.py`. Xuất `reports/bench/sprint5_baseline.{json,csv,md}` với nhãn `is_preliminary: true`.
+- **Phân tách kịch bản (`evaluation/bench/benchmark_split.yaml`)**: 11 kịch bản `tuning` và 11 kịch bản `eval` (tổng 22 kịch bản phủ 8 loại lỗi `FT01`–`FT12` + đối chứng).
+- **Ngày biến động (`evaluation/volatile_days.yaml`)**: danh sách ngày mô phỏng/lịch sử và tiêu chí chọn ngày kiểm thử cảnh báo giả.
+- **Mục tiêu M2–M6 sơ bộ**: [`docs/sprint5/targets-m2-m6.md`](sprint5/targets-m2-m6.md), quy trình thí nghiệm [`docs/sprint5/experiment-protocol.md`](sprint5/experiment-protocol.md), slide demo [`docs/sprint5/demo-slides-outline.md`](sprint5/demo-slides-outline.md).

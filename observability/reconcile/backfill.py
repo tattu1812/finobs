@@ -9,6 +9,7 @@ import argparse
 import json
 import sys
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,7 +23,6 @@ from observability.reconcile.reconcile import (  # noqa: E402
     load_tolerances,
     reconcile_symbol,
 )
-from decimal import Decimal
 
 
 def _load_from_fixtures(fixture_dir: Path, symbol: str) -> tuple[list[dict], list[dict]]:
