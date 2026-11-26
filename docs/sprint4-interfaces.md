@@ -83,3 +83,32 @@ Tài liệu này là hợp đồng giao tiếp chính thức cho Sprint 4 giữa
 - **Injector v2 (`evaluation/injector/injector_v2.py`)**: Hỗ trợ 8 loại lỗi (`FT01`, `FT02`, `FT03`, `FT05`, `FT06`, `FT07`, `FT09`, `FT12`), mặc định `dry_run=True`, topic tiêm thử có tiền tố `test.`.
 - **MTTD Harness (`evaluation/bench/mttd_harness.py`)**: Xuất kết quả benchmark ra `reports/bench/mttd_summary.{json,csv,md}`.
 - **Phân tách kịch bản**: Nhóm chỉnh tham số (*tuning*) tách khỏi nhóm đánh giá (*eval*) theo `evaluation/scenarios/benchmark_split.yaml`.
+
+---
+
+# Hợp đồng Giao tiếp — Sprint 5
+
+## AI (Sprint 5) — Agent Chẩn đoán RCA v1 (ReAct + 5 Read-Only Tools)
+
+- **5 Tool chỉ-đọc (`agent/tools/readonly_tools.py`)**: `read_metrics`, `read_lineage`, `query_table`, `read_incident`, `read_config`.
+  - `query_table`: chỉ cho phép 1 câu lệnh `SELECT` trên allowlist bảng, `LIMIT <= 100`.
+  - `read_config`: chỉ đọc trong `config/` và contract/catalog YAML, chặn `.env` và path traversal.
+- **Đầu ra chẩn đoán (`agent/react_agent.py`)**:
+  ```json
+  {
+    "incident_id": "INC-S002",
+    "prompt_version": "v1.0.0",
+    "status": "completed",
+    "hypotheses": [
+      {
+        "rank": 1,
+        "root_cause": "...",
+        "suspected_asset": "finobs:raw.binance.trade",
+        "confidence": 0.9,
+        "evidence": [{"call_id": "call_001", "tool": "read_incident", "excerpt": "..."}],
+        "suggested_remediation_text": "..."
+      }
+    ]
+  }
+  ```
+- **Biến môi trường LLM (`.env.example`)**: `FINOBS_LLM_API_KEY`, `FINOBS_LLM_BASE_URL`, `FINOBS_LLM_MODEL`.
