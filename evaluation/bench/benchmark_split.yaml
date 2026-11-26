@@ -1,0 +1,9 @@
+# Tách tập kịch bản dùng để chỉnh tham số (tuning) khỏi tập đánh giá (eval)
+# để tránh overfitting / benchmark "đẹp giả" (EV-A, Sprint 4).
+tuning:
+  - S001_coinbase_duplicate_burst
+  - S003_collector_clock_skew
+
+eval:
+  - S002_binance_schema_drift
+  - S100_control_market_burst

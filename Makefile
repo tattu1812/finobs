@@ -18,8 +18,8 @@ endif
 TRINO = docker exec finobs-trino trino --output-format ALIGNED --execute
 
 .PHONY: help check build up down stop restart ps logs venv clock-check record analyze \
-	validate-contracts validate-scenarios test test-agent test-observability test-platform \
-	lineage bronze-check official-check load-official
+	validate-contracts validate-scenarios test test-agent test-observability test-platform test-reconcile \
+	lineage bronze-check official-check load-official reconcile
 
 help:
 	@echo "FinObs commands:"
@@ -36,6 +36,7 @@ help:
 	@echo "  make bronze-check       - Trino: dữ liệu live mới nhất trên bronze.trades_raw"
 	@echo "  make load-official      - Nạp file chính thức Binance ngày DATE=$(DATE) (trong container Airflow)"
 	@echo "  make official-check     - Trino: số trade và dãy ID của bronze.binance_official_trades"
+	@echo "  make reconcile          - Đối soát D+1 stream vs file chính thức (DATE=$(DATE))"
 	@echo ""
 	@echo "Ingest (chạy trên máy, ra file):"
 	@echo "  make venv               - Tạo .venv và cài requirements-ingest.txt + requirements-test.txt"
@@ -95,8 +96,9 @@ analyze: $(PY_DEP)
 validate-contracts: $(PY_DEP)
 	$(PY) platform/contracts/validate.py --in $(VALIDATE_IN)
 	$(PY) platform/contracts/validate.py --in tests/fixtures/invalid --expect-invalid --show 0
+	$(PY) -c "import yaml, pathlib; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in sorted(pathlib.Path('config/contracts').glob('*.contract.yaml'))]"
 
-test: test-platform test-observability test-agent
+test: test-platform test-observability test-agent test-reconcile test-sprint4
 
 test-platform: $(PY_DEP)
 	$(PY) -m unittest tests.test_producer_sinks tests.test_binance_official -v
@@ -106,6 +108,15 @@ test-agent: $(PY_DEP)
 
 test-observability: $(PY_DEP)
 	$(PY) -m unittest tests.test_trade_count_collector tests.test_freshness_collector -v
+
+test-reconcile: $(PY_DEP)
+	$(PY) -m unittest tests.test_gap_detection tests.test_reconcile -v
+
+test-sprint4: $(PY_DEP)
+	$(PY) -m unittest tests.test_sketch_profiler tests.test_slo_engine tests.test_rca_incidents tests.test_eval_v2 -v
+
+validate-slo: $(PY_DEP)
+	$(PY) -c "from observability.slo.slo_engine import validate_slo_file; validate_slo_file(); print('SLO YAML OK')"
 
 lineage: $(PY_DEP)
 	$(PY) -m agent.tools.lineage_graph --alerts $(if $(MARQUEZ_URL),--marquez-url $(MARQUEZ_URL))
@@ -130,3 +141,9 @@ official-check:
 	$(TRINO) "SELECT file_date, symbol, count(*) AS rows, max(trade_id) - min(trade_id) + 1 AS id_span, \
 	  count(DISTINCT checksum) AS files FROM iceberg.bronze.binance_official_trades \
 	  GROUP BY 1, 2 ORDER BY 1 DESC, 3 DESC"
+
+reconcile: $(PY_DEP)
+	$(PY) observability/reconcile/reconcile.py --date $(DATE) \
+	  $(if $(SYMBOLS),--symbols $(SYMBOLS)) \
+	  $(if $(FROM),--from $(FROM)) $(if $(TO),--to $(TO)) \
+	  $(if $(FIXTURE_DIR),--fixture-dir $(FIXTURE_DIR))

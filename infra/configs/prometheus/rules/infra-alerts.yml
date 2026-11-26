@@ -1,0 +1,97 @@
+groups:
+  - name: finobs-infra-alerts
+    rules:
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: info
+          service: finobs-alerting
+          source: system
+          symbol: all
+        annotations:
+          summary: "Heartbeat cảnh báo FinObs đang hoạt động"
+          description: "Cảnh báo luôn bắn để xác nhận đường Prometheus -> Alertmanager còn sống."
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+          source: infra
+          symbol: all
+        annotations:
+          summary: "Target {{ $labels.job }} ({{ $labels.instance }}) ngừng phản hồi"
+          description: "Prometheus không scrape được target quá 2 phút."
+
+      - alert: HostLowMemory
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.15
+        for: 3m
+        labels:
+          severity: critical
+          service: host
+          source: infra
+          symbol: all
+        annotations:
+          summary: "RAM khả dụng dưới 15% (máy 8 GB không swap)"
+          description: "RAM trống còn {{ $value | humanizePercentage }}."
+
+      - alert: HostDiskAlmostFull
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 5m
+        labels:
+          severity: high
+          service: host
+          source: infra
+          symbol: all
+        annotations:
+          summary: "Ổ đĩa còn dưới 15% dung lượng trống"
+          description: "Dung lượng trống còn {{ $value | humanizePercentage }}."
+
+      - alert: KafkaConsumerLagGrowing
+        expr: deriv(kafka_consumergroup_lag{consumergroup=~".*bronze.*"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: high
+          service: bronze-stream
+          source: kafka
+          symbol: all
+        annotations:
+          summary: "Consumer lag của bronze-stream đang tăng liên tục"
+          description: "Tốc độ tăng lag dương trong 5 phút liên tiếp."
+
+      - alert: BronzeWriteLatencyHigh
+        expr: finobs_bronze_write_delay_seconds > 60
+        for: 3m
+        labels:
+          severity: high
+          service: bronze-stream
+          source: iceberg
+          symbol: all
+        annotations:
+          summary: "Độ trễ ghi bảng bronze vượt 60 giây"
+          description: "Độ trễ hiện tại: {{ $value }}s."
+
+      - alert: ProducerSilentWindow
+        expr: increase(finobs_producer_records_total{result="valid"}[5m]) == 0
+        for: 2m
+        labels:
+          severity: high
+          service: producer
+          source: "{{ $labels.source }}"
+          symbol: all
+        annotations:
+          summary: "Producer không có bản ghi hợp lệ mới trong 5 phút"
+          description: "Nguồn {{ $labels.source }} không ghi nhận bản ghi hợp lệ nào trong 5 phút qua."
+
+      - alert: BackupStale
+        expr: (time() - finobs_backup_last_success_timestamp_seconds) > 93600
+        for: 5m
+        labels:
+          severity: high
+          service: backup
+          source: infra
+          symbol: all
+        annotations:
+          summary: "Sao lưu dữ liệu đã quá 26 giờ chưa thành công"
+          description: "Cần kiểm tra cron/script sao lưu trên VM."

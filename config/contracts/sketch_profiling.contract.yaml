@@ -1,0 +1,34 @@
+name: sketch_profiling_metrics
+version: "1.0.0"
+description: >
+  Contract đầu ra cho profiling theo cửa sổ bằng KLLSketch và HyperLogLog (OB-A, Sprint 4).
+
+columns:
+  - name: metric_name
+    type: string
+    enum:
+      - price_sketch_p50_1m
+      - price_sketch_p95_1m
+      - size_sketch_p95_1m
+      - trade_id_hll_distinct_1m
+      - price_sketch_p50_5m
+      - price_sketch_p95_5m
+      - size_sketch_p95_5m
+      - trade_id_hll_distinct_5m
+  - name: dimensions
+    type: object
+    required_keys: [source, symbol_canonical]
+  - name: observed_at
+    type: timestamp
+  - name: window_start
+    type: timestamp
+  - name: window_end
+    type: timestamp
+  - name: value
+    type: number
+    nullable: true
+  - name: status
+    type: string
+    enum: [ok, no_data, source_unavailable, insufficient_data, error]
+  - name: sample_count
+    type: integer

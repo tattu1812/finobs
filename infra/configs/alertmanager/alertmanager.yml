@@ -1,0 +1,19 @@
+# Cấu hình mẫu Alertmanager (dùng để kiểm tra bằng amtool check-config).
+# Khi chạy trong Docker, entrypoint.sh sẽ sinh /tmp/alertmanager.yml từ env.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "null"
+  group_by: ['alertname', 'source', 'symbol', 'pillar']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - alertname="Watchdog"
+      receiver: "null"
+      repeat_interval: 15m
+
+receivers:
+  - name: "null"

@@ -1,0 +1,138 @@
+schema_version: 1
+
+slos:
+  - name: live_freshness_crypto
+    pillar: freshness
+    description: "Độ tươi trade live cho nguồn crypto 24/7 <= 30 giây."
+    owner: OB
+    target: 0.995
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: last_live_trade_age_seconds
+      comparator: lte
+      threshold: 30
+    burn_rate_windows:
+      - name: fast_page
+        short_window: 5m
+        long_window: 1h
+        burn_rate_threshold: 14.4
+        severity: critical
+      - name: slow_ticket
+        short_window: 6h
+        long_window: 3d
+        burn_rate_threshold: 1.0
+        severity: medium
+
+  - name: live_freshness_vnstock
+    pillar: freshness
+    description: "Độ tươi trade cho nguồn vnstock trong giờ giao dịch HOSE."
+    owner: OB
+    target: 0.99
+    window_days: 14
+    trading_schedule: hose_vn30
+    sli:
+      metric_name: last_live_trade_age_seconds
+      comparator: lte
+      threshold: 60
+    burn_rate_windows:
+      - name: fast_page
+        short_window: 5m
+        long_window: 1h
+        burn_rate_threshold: 14.4
+        severity: high
+
+  - name: ingest_volume_availability
+    pillar: volume
+    description: "Mỗi cửa sổ 1 phút đều phải có trade hợp lệ được ghi nhận (> 0)."
+    owner: OB
+    target: 0.995
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: trade_count_1m
+      comparator: gte
+      threshold: 1
+    burn_rate_windows:
+      - name: fast_page
+        short_window: 5m
+        long_window: 1h
+        burn_rate_threshold: 14.4
+        severity: critical
+
+  - name: trade_id_completeness
+    pillar: completeness
+    description: "Chuỗi trade ID không bị mất gói (gap_missing_total == 0) và đối soát D+1 đạt >= 99.9%."
+    owner: DE
+    target: 0.999
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: trade_id_gap_missing_total
+      comparator: lte
+      threshold: 0
+    burn_rate_windows:
+      - name: fast_page
+        short_window: 5m
+        long_window: 1h
+        burn_rate_threshold: 6.0
+        severity: high
+      - name: slow_ticket
+        short_window: 6h
+        long_window: 3d
+        burn_rate_threshold: 1.0
+        severity: medium
+
+  - name: daily_reconciliation_coverage
+    pillar: completeness
+    description: "Tỷ lệ khớp đối soát D+1 Binance >= 99.9%."
+    owner: DE
+    target: 0.999
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: reconciliation_match_ratio
+      comparator: gte
+      threshold: 0.999
+    burn_rate_windows:
+      - name: daily_check
+        short_window: 1h
+        long_window: 24h
+        burn_rate_threshold: 1.0
+        severity: high
+
+  - name: schema_contract_compliance
+    pillar: schema
+    description: "Tỷ lệ vi phạm data contract mỗi phút <= 0.1%."
+    owner: DE
+    target: 0.999
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: contract_violation_rate_1m
+      comparator: lte
+      threshold: 0.001
+    burn_rate_windows:
+      - name: fast_page
+        short_window: 5m
+        long_window: 1h
+        burn_rate_threshold: 14.4
+        severity: critical
+
+  - name: trade_size_distribution_stability
+    pillar: distribution
+    description: "Sketch size p95 không vượt ngưỡng bất thường."
+    owner: OB
+    target: 0.99
+    window_days: 14
+    trading_schedule: 24x7
+    sli:
+      metric_name: size_sketch_p95_5m
+      comparator: gte
+      threshold: 0
+    burn_rate_windows:
+      - name: slow_ticket
+        short_window: 6h
+        long_window: 3d
+        burn_rate_threshold: 1.0
+        severity: low
